@@ -383,69 +383,69 @@ namespace Il2CppDumper
                 }
             }
             //第三遍，添加CustomAttribute
-            if (il2Cpp.Version > 20)
-            {
-                foreach (var imageDef in metadata.imageDefs)
-                {
-                    var typeEnd = imageDef.typeStart + imageDef.typeCount;
-                    for (int index = imageDef.typeStart; index < typeEnd; index++)
-                    {
-                        var typeDef = metadata.typeDefs[index];
-                        var typeDefinition = typeDefinitionDic[typeDef];
-                        //typeAttribute
-                        CreateCustomAttribute(imageDef, typeDef.customAttributeIndex, typeDef.token, typeDefinition.Module, typeDefinition.CustomAttributes);
+            //if (il2Cpp.Version > 20)
+            //{
+            //    foreach (var imageDef in metadata.imageDefs)
+            //    {
+            //        var typeEnd = imageDef.typeStart + imageDef.typeCount;
+            //        for (int index = imageDef.typeStart; index < typeEnd; index++)
+            //        {
+            //            var typeDef = metadata.typeDefs[index];
+            //            var typeDefinition = typeDefinitionDic[typeDef];
+            //            //typeAttribute
+            //            CreateCustomAttribute(imageDef, typeDef.customAttributeIndex, typeDef.token, typeDefinition.Module, typeDefinition.CustomAttributes);
 
-                        //field
-                        var fieldEnd = typeDef.fieldStart + typeDef.field_count;
-                        for (var i = typeDef.fieldStart; i < fieldEnd; ++i)
-                        {
-                            var fieldDef = metadata.fieldDefs[i];
-                            var fieldDefinition = fieldDefinitionDic[i];
-                            //fieldAttribute
-                            CreateCustomAttribute(imageDef, fieldDef.customAttributeIndex, fieldDef.token, typeDefinition.Module, fieldDefinition.CustomAttributes);
-                        }
+            //            //field
+            //            var fieldEnd = typeDef.fieldStart + typeDef.field_count;
+            //            for (var i = typeDef.fieldStart; i < fieldEnd; ++i)
+            //            {
+            //                var fieldDef = metadata.fieldDefs[i];
+            //                var fieldDefinition = fieldDefinitionDic[i];
+            //                //fieldAttribute
+            //                CreateCustomAttribute(imageDef, fieldDef.customAttributeIndex, fieldDef.token, typeDefinition.Module, fieldDefinition.CustomAttributes);
+            //            }
 
-                        //method
-                        var methodEnd = typeDef.methodStart + typeDef.method_count;
-                        for (var i = typeDef.methodStart; i < methodEnd; ++i)
-                        {
-                            var methodDef = metadata.methodDefs[i];
-                            var methodDefinition = methodDefinitionDic[i];
-                            //methodAttribute
-                            CreateCustomAttribute(imageDef, methodDef.customAttributeIndex, methodDef.token, typeDefinition.Module, methodDefinition.CustomAttributes);
+            //            //method
+            //            var methodEnd = typeDef.methodStart + typeDef.method_count;
+            //            for (var i = typeDef.methodStart; i < methodEnd; ++i)
+            //            {
+            //                var methodDef = metadata.methodDefs[i];
+            //                var methodDefinition = methodDefinitionDic[i];
+            //                //methodAttribute
+            //                CreateCustomAttribute(imageDef, methodDef.customAttributeIndex, methodDef.token, typeDefinition.Module, methodDefinition.CustomAttributes);
 
-                            //method parameter
-                            for (var j = 0; j < methodDef.parameterCount; ++j)
-                            {
-                                var parameterDef = metadata.parameterDefs[methodDef.parameterStart + j];
-                                var parameterDefinition = parameterDefinitionDic[methodDef.parameterStart + j];
-                                //parameterAttribute
-                                CreateCustomAttribute(imageDef, parameterDef.customAttributeIndex, parameterDef.token, typeDefinition.Module, parameterDefinition.CustomAttributes);
-                            }
-                        }
+            //                //method parameter
+            //                for (var j = 0; j < methodDef.parameterCount; ++j)
+            //                {
+            //                    var parameterDef = metadata.parameterDefs[methodDef.parameterStart + j];
+            //                    var parameterDefinition = parameterDefinitionDic[methodDef.parameterStart + j];
+            //                    //parameterAttribute
+            //                    CreateCustomAttribute(imageDef, parameterDef.customAttributeIndex, parameterDef.token, typeDefinition.Module, parameterDefinition.CustomAttributes);
+            //                }
+            //            }
 
-                        //property
-                        var propertyEnd = typeDef.propertyStart + typeDef.property_count;
-                        for (var i = typeDef.propertyStart; i < propertyEnd; ++i)
-                        {
-                            var propertyDef = metadata.propertyDefs[i];
-                            var propertyDefinition = propertyDefinitionDic[i];
-                            //propertyAttribute
-                            CreateCustomAttribute(imageDef, propertyDef.customAttributeIndex, propertyDef.token, typeDefinition.Module, propertyDefinition.CustomAttributes);
-                        }
+            //            //property
+            //            var propertyEnd = typeDef.propertyStart + typeDef.property_count;
+            //            for (var i = typeDef.propertyStart; i < propertyEnd; ++i)
+            //            {
+            //                var propertyDef = metadata.propertyDefs[i];
+            //                var propertyDefinition = propertyDefinitionDic[i];
+            //                //propertyAttribute
+            //                CreateCustomAttribute(imageDef, propertyDef.customAttributeIndex, propertyDef.token, typeDefinition.Module, propertyDefinition.CustomAttributes);
+            //            }
 
-                        //event
-                        var eventEnd = typeDef.eventStart + typeDef.event_count;
-                        for (var i = typeDef.eventStart; i < eventEnd; ++i)
-                        {
-                            var eventDef = metadata.eventDefs[i];
-                            var eventDefinition = eventDefinitionDic[i];
-                            //eventAttribute
-                            CreateCustomAttribute(imageDef, eventDef.customAttributeIndex, eventDef.token, typeDefinition.Module, eventDefinition.CustomAttributes);
-                        }
-                    }
-                }
-            }
+            //            //event
+            //            var eventEnd = typeDef.eventStart + typeDef.event_count;
+            //            for (var i = typeDef.eventStart; i < eventEnd; ++i)
+            //            {
+            //                var eventDef = metadata.eventDefs[i];
+            //                var eventDefinition = eventDefinitionDic[i];
+            //                //eventAttribute
+            //                CreateCustomAttribute(imageDef, eventDef.customAttributeIndex, eventDef.token, typeDefinition.Module, eventDefinition.CustomAttributes);
+            //            }
+            //        }
+            //    }
+            //}
         }
 
         private TypeReference GetTypeReferenceWithByRef(MemberReference memberReference, Il2CppType il2CppType)
@@ -599,9 +599,9 @@ namespace Il2CppDumper
                         var reader = new CustomAttributeDataReader(executor, buff);
                         if (reader.Count != 0)
                         {
-                            for (var i = 0; i < reader.Count; i++)
+                            var iterator = reader.VisitCustomAttributeData();
+                            foreach (var visitor in iterator)
                             {
-                                var visitor = reader.VisitCustomAttributeData();
                                 var methodDefinition = methodDefinitionDic[visitor.CtorIndex];
                                 var customAttribute = new CustomAttribute(moduleDefinition.ImportReference(methodDefinition));
                                 foreach (var argument in visitor.Arguments)
