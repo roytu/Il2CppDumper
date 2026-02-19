@@ -55,7 +55,7 @@ namespace Il2CppDumper
                         {
                             for (int i = 0; i < typeDef.interfaces_count; i++)
                             {
-                                var @interface = il2Cpp.types[metadata.interfaceIndices[typeDef.interfacesStart + i]];
+                                var @interface = il2Cpp.types[metadata.interfaceOffsetPairs[i].interfaceTypeIndex];
                                 extends.Add(executor.GetTypeName(@interface, false, false));
                             }
                         }
@@ -425,7 +425,7 @@ namespace Il2CppDumper
                 {
                     var startRange = metadata.attributeDataRanges[attributeIndex];
                     var endRange = metadata.attributeDataRanges[attributeIndex + 1];
-                    metadata.Position = metadata.header.attributeDataOffset + startRange.startOffset;
+                    metadata.Position = (il2Cpp.Version < 38 ? metadata.header.attributeDataOffset : metadata.header.attributeData.offset) + startRange.startOffset;
                     var buff = metadata.ReadBytes((int)(endRange.startOffset - startRange.startOffset));
                     var reader = new CustomAttributeDataReader(executor, buff);
                     if (reader.Count == 0)
