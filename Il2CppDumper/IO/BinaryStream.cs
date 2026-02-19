@@ -168,6 +168,10 @@ namespace Il2CppDumper
                         }
                         i.SetValue(t, methodInfo.Invoke(this, new object[] { arrayLengthAttribute.Length }));
                     }
+                    else if (fieldType == typeof(Il2CppSectionMetadata))
+                    {
+                        i.SetValue(t, ReadClass<Il2CppSectionMetadata>());
+                    }
                     else
                     {
                         if (!genericMethodCache.TryGetValue(fieldType, out var methodInfo))
