@@ -121,7 +121,7 @@ namespace Il2CppDumper
                                 var fieldType = il2Cpp.types[fieldDef.typeIndex];
                                 var isStatic = false;
                                 var isConst = false;
-                                if (config.DumpAttribute)
+                                if (config.DumpAttribute && false)
                                 {
                                     writer.Write(GetCustomAttribute(imageDef, fieldDef.customAttributeIndex, fieldDef.token, "\t"));
                                 }

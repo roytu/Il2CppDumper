@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Il2CppDumper
 {
@@ -380,11 +381,7 @@ namespace Il2CppDumper
                                         il2Cpp.Position = il2Cpp.MapVATR(refva3 - il2Cpp.PointerSize);
                                         if (il2Cpp.ReadIntPtr() == imageCount)
                                         {
-                                            if (il2Cpp.Version >= 29)
-                                            {
-                                                return refva3 - il2Cpp.PointerSize * 14;
-                                            }
-                                            return refva3 - il2Cpp.PointerSize * 13;
+                                            return refva3 - Il2CppCodeRegistration.Size(il2Cpp.Version) + il2Cpp.PointerSize;
                                         }
                                     }
                                 }
@@ -395,7 +392,7 @@ namespace Il2CppDumper
                                 {
                                     foreach (var refva3 in FindReference(refva2 - (ulong)i * il2Cpp.PointerSize))
                                     {
-                                        return refva3 - il2Cpp.PointerSize * 13;
+                                        return refva3 - Il2CppCodeRegistration.Size(il2Cpp.Version) + il2Cpp.PointerSize;
                                     }
                                 }
                             }
