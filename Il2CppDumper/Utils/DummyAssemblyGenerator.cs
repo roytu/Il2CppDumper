@@ -81,7 +81,7 @@ namespace Il2CppDumper
                 var moduleDefinition = assemblyDefinition.MainModule;
                 moduleDefinition.Types.Clear();//清除自动创建的<Module>类
                 var typeEnd = imageDef.typeStart + imageDef.typeCount;
-                for (var index = imageDef.typeStart; index < typeEnd; ++index)
+                for (int index = imageDef.typeStart; index < typeEnd; ++index)
                 {
                     var typeDef = metadata.typeDefs[index];
                     var namespaceName = metadata.GetStringFromIndex(typeDef.namespaceIndex);
@@ -97,7 +97,7 @@ namespace Il2CppDumper
             foreach (var imageDef in metadata.imageDefs)
             {
                 var typeEnd = imageDef.typeStart + imageDef.typeCount;
-                for (var index = imageDef.typeStart; index < typeEnd; ++index)
+                for (int index = imageDef.typeStart; index < typeEnd; ++index)
                 {
                     var typeDef = metadata.typeDefs[index];
                     var typeDefinition = typeDefinitionDic[typeDef];
@@ -116,7 +116,7 @@ namespace Il2CppDumper
             foreach (var imageDef in metadata.imageDefs)
             {
                 var typeEnd = imageDef.typeStart + imageDef.typeCount;
-                for (var index = imageDef.typeStart; index < typeEnd; ++index)
+                for (int index = imageDef.typeStart; index < typeEnd; ++index)
                 {
                     var typeDef = metadata.typeDefs[index];
                     var typeDefinition = typeDefinitionDic[typeDef];
@@ -152,7 +152,7 @@ namespace Il2CppDumper
                     //interfaces
                     for (int i = 0; i < typeDef.interfaces_count; i++)
                     {
-                        var interfaceType = il2Cpp.types[metadata.interfaceIndices[typeDef.interfacesStart + i]];
+                        var interfaceType = il2Cpp.types[metadata.interfaceOffsetPairs[i].interfaceTypeIndex];
                         var interfaceTypeRef = GetTypeReference(typeDefinition, interfaceType);
                         typeDefinition.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
                     }
@@ -536,18 +536,17 @@ namespace Il2CppDumper
                         return new ArrayType(GetTypeReference(memberReference, oriType));
                     }
                 case Il2CppTypeEnum.IL2CPP_TYPE_VAR:
+                case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
                     {
                         if (memberReference is MethodDefinition methodDefinition)
                         {
                             return CreateGenericParameter(executor.GetGenericParameteFromIl2CppType(il2CppType), methodDefinition.DeclaringType);
                         }
-                        var typeDefinition = (TypeDefinition)memberReference;
-                        return CreateGenericParameter(executor.GetGenericParameteFromIl2CppType(il2CppType), typeDefinition);
-                    }
-                case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
-                    {
-                        var methodDefinition = (MethodDefinition)memberReference;
-                        return CreateGenericParameter(executor.GetGenericParameteFromIl2CppType(il2CppType), methodDefinition);
+                        if (memberReference is TypeDefinition typeDefinition)
+                        {
+                            return CreateGenericParameter(executor.GetGenericParameteFromIl2CppType(il2CppType), typeDefinition);
+                        }
+                        throw new NotSupportedException();
                     }
                 case Il2CppTypeEnum.IL2CPP_TYPE_PTR:
                     {
@@ -594,7 +593,7 @@ namespace Il2CppDumper
                     {
                         var startRange = metadata.attributeDataRanges[attributeIndex];
                         var endRange = metadata.attributeDataRanges[attributeIndex + 1];
-                        metadata.Position = metadata.header.attributeDataOffset + startRange.startOffset;
+                        metadata.Position = (il2Cpp.Version < 38 ? metadata.header.attributeDataOffset : metadata.header.attributeData.offset) + startRange.startOffset;
                         var buff = metadata.ReadBytes((int)(endRange.startOffset - startRange.startOffset));
                         var reader = new CustomAttributeDataReader(executor, buff);
                         if (reader.Count != 0)
@@ -663,7 +662,7 @@ namespace Il2CppDumper
                 genericParameterDic.Add(param, genericParameter);
                 for (int i = 0; i < param.constraintsCount; ++i)
                 {
-                    var il2CppType = il2Cpp.types[metadata.constraintIndices[param.constraintsStart + i]];
+                    var il2CppType = il2Cpp.types[metadata.constraintIndices[param.constraintsStart + i].index];
                     genericParameter.Constraints.Add(new GenericParameterConstraint(GetTypeReference((MemberReference)iGenericParameterProvider, il2CppType)));
                 }
             }
