@@ -18,7 +18,7 @@ namespace Il2CppDumper
         public Il2CppParameterDefinition[] parameterDefs;
         public Il2CppFieldDefinition[] fieldDefs;
         private readonly Dictionary<int, Il2CppFieldDefaultValue> fieldDefaultValuesDic;
-        private readonly Dictionary<int, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
+        private readonly Dictionary<ParameterIndex, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
         public Il2CppPropertyDefinition[] propertyDefs;
         public Il2CppCustomAttributeTypeRange[] attributeTypeRanges;
         public Il2CppCustomAttributeDataRange[] attributeDataRanges;
@@ -46,6 +46,7 @@ namespace Il2CppDumper
         public static int typeIndexSize;
         public static int typeDefinitionIndexSize;
         public static int genericContainerIndexSize;
+        public static int parameterIndexSize;
 
         public Metadata(Stream stream) : base(stream)
         {
@@ -59,7 +60,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 38)
+            if (version < 16 || version > 39)
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -102,6 +103,7 @@ namespace Il2CppDumper
                 typeIndexSize = sizeOfIl2CppParameterDefinition - 8;
                 typeDefinitionIndexSize = GetIndexSize((int)header.typeDefinitions.count);
                 genericContainerIndexSize = GetIndexSize((int)header.genericContainers.count);
+                parameterIndexSize = GetIndexSize((int)header.parameters.count);
             }
             else
             {
@@ -109,6 +111,7 @@ namespace Il2CppDumper
                 typeIndexSize = 4;
                 typeDefinitionIndexSize = 4;
                 genericContainerIndexSize = 4;
+                parameterIndexSize = 4;
             }
 
             imageDefs = Version < 38
@@ -251,7 +254,7 @@ namespace Il2CppDumper
 
         public bool GetParameterDefaultValueFromIndex(int index, out Il2CppParameterDefaultValue value)
         {
-            return parameterDefaultValuesDic.TryGetValue(index, out value);
+            return parameterDefaultValuesDic.TryGetValue(new ParameterIndex(index), out value);
         }
 
         public uint GetDefaultValueFromIndex(int index)
@@ -384,6 +387,10 @@ namespace Il2CppDumper
                 else if (fieldType == typeof(GenericContainerIndex))
                 {
                     size += genericContainerIndexSize;
+                }
+                else if (fieldType == typeof(ParameterIndex))
+                {
+                    size += parameterIndexSize;
                 }
                 else
                 {
