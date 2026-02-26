@@ -385,7 +385,7 @@ namespace Il2CppDumper
         public TypeIndex returnType;
         [Version(Min = 31)]
         public int returnParameterToken;
-        public int parameterStart;
+        public ParameterIndex parameterStart;
         [Version(Max = 24)]
         public int customAttributeIndex;
         public GenericContainerIndex genericContainerIndex;
@@ -480,7 +480,7 @@ namespace Il2CppDumper
 
     public class Il2CppParameterDefaultValue
     {
-        public int parameterIndex;
+        public ParameterIndex parameterIndex;
         public TypeIndex typeIndex;
         public int dataIndex;
     }
@@ -618,7 +618,16 @@ namespace Il2CppDumper
             return genericContainer.value;
         }
     }
-
-
-
+    public class ParameterIndex : ICustomType
+    {
+        public int value;
+        public ParameterIndex(int value)
+        {
+            this.value = value;
+        }
+        public static implicit operator int(ParameterIndex parameter)
+        {
+            return parameter.value;
+        }
+    }
 }

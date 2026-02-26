@@ -281,9 +281,10 @@ namespace Il2CppDumper
                                 }
                                 writer.Write($"{executor.GetTypeName(methodReturnType, false, false)} {methodName}(");
                                 var parameterStrs = new List<string>();
-                                for (var j = 0; j < methodDef.parameterCount; ++j)
+                                for (int j = 0; j < methodDef.parameterCount; ++j)
                                 {
                                     var parameterStr = "";
+
                                     var parameterDef = metadata.parameterDefs[methodDef.parameterStart + j];
                                     var parameterName = metadata.GetStringFromIndex(parameterDef.nameIndex);
                                     var parameterType = il2Cpp.types[parameterDef.typeIndex];

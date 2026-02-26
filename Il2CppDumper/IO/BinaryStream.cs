@@ -215,6 +215,40 @@ namespace Il2CppDumper
                 }
             }
         }
+        public ParameterIndex ReadParameterIndex()
+        {
+            if (Version < 39)
+            {
+                // Before Version 39, these were always Int32
+                int value = ReadInt32();
+                return new ParameterIndex(value);
+            }
+            else
+            {
+                switch (Metadata.parameterIndexSize)
+                {
+                    case 1:
+                        {
+                            uint value = ReadByte();
+                            if (value == Byte.MaxValue) return new ParameterIndex(-1);
+                            return new ParameterIndex((int)value);
+                        }
+                    case 2:
+                        {
+                            uint value = ReadUInt16();
+                            if (value == UInt16.MaxValue) return new ParameterIndex(-1);
+                            return new ParameterIndex((int)value);
+                        }
+                    case 4:
+                    default:
+                        {
+                            uint value = ReadUInt32();
+                            if (value == UInt32.MaxValue) return new ParameterIndex(-1);
+                            return new ParameterIndex((int)value);
+                        }
+                }
+            }
+        }
 
         public T ReadClass<T>() where T : new()
         {
@@ -283,6 +317,10 @@ namespace Il2CppDumper
                     else if (fieldType == typeof(GenericContainerIndex))
                     {
                         i.SetValue(t, ReadGenericContainerIndex());
+                    }
+                    else if (fieldType == typeof(ParameterIndex))
+                    {
+                        i.SetValue(t, ReadParameterIndex());
                     }
                     else if (fieldType == typeof(Il2CppSectionMetadata))
                     {
