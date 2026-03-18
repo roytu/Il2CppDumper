@@ -29,7 +29,7 @@ namespace Il2CppDumper
             for (var imageIndex = 0; imageIndex < metadata.imageDefs.Length; imageIndex++)
             {
                 var imageDef = metadata.imageDefs[imageIndex];
-                writer.Write($"// Image {imageIndex}: {metadata.GetStringFromIndex(imageDef.nameIndex)} - {imageDef.typeStart}\n");
+                writer.Write($"// Image {imageIndex}: {metadata.GetStringFromIndex(imageDef.nameIndex)} - {imageDef.typeStart.value}\n");
             }
             //dump type
             foreach (var imageDef in metadata.imageDefs)
