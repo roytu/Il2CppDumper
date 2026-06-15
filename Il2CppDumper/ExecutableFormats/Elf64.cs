@@ -40,7 +40,7 @@ namespace Il2CppDumper
                 RelocationProcessing();
                 if (CheckProtection())
                 {
-                    Console.WriteLine("ERROR: This file may be protected.");
+                    Logger.Log("ERROR: This file may be protected.");
                 }
             }
         }
@@ -117,13 +117,13 @@ namespace Il2CppDumper
             }
             if (codeRegistration > 0 && metadataRegistration > 0)
             {
-                Console.WriteLine("Detected Symbol !");
-                Console.WriteLine("CodeRegistration : {0:x}", codeRegistration);
-                Console.WriteLine("MetadataRegistration : {0:x}", metadataRegistration);
+                Logger.Log("Detected Symbol !");
+                Logger.Log("CodeRegistration : {0:x}", codeRegistration);
+                Logger.Log("MetadataRegistration : {0:x}", metadataRegistration);
                 Init(codeRegistration, metadataRegistration);
                 return true;
             }
-            Console.WriteLine("ERROR: No symbol is detected");
+            Logger.Log("ERROR: No symbol is detected");
             return false;
         }
 
@@ -182,7 +182,7 @@ namespace Il2CppDumper
 
         private void RelocationProcessing()
         {
-            Console.WriteLine("Applying relocations...");
+            Logger.Log("Applying relocations...");
             try
             {
                 var relaOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_RELA).d_un);
@@ -222,7 +222,7 @@ namespace Il2CppDumper
                 //.init_proc
                 if (dynamicSection.Any(x => x.d_tag == DT_INIT))
                 {
-                    Console.WriteLine("WARNING: find .init_proc");
+                    Logger.Log("WARNING: find .init_proc");
                     return true;
                 }
                 //JNI_OnLoad
@@ -233,13 +233,13 @@ namespace Il2CppDumper
                     switch (name)
                     {
                         case "JNI_OnLoad":
-                            Console.WriteLine("WARNING: find JNI_OnLoad");
+                            Logger.Log("WARNING: find JNI_OnLoad");
                             return true;
                     }
                 }
                 if (sectionTable != null && sectionTable.Any(x => x.sh_type == SHT_LOUSER))
                 {
-                    Console.WriteLine("WARNING: find SHT_LOUSER section");
+                    Logger.Log("WARNING: find SHT_LOUSER section");
                     return true;
                 }
             }

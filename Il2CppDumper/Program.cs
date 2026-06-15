@@ -88,7 +88,7 @@ namespace Il2CppDumper
             }
             if (metadataPath == null)
             {
-                Console.WriteLine($"ERROR: Metadata file not found or encrypted.");
+                Logger.Log($"ERROR: Metadata file not found or encrypted.");
             }
             else
             {
@@ -101,29 +101,29 @@ namespace Il2CppDumper
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
+                    Logger.Log(e);
                 }
             }
             if (config.RequireAnyKey)
             {
-                Console.WriteLine("Press any key to exit...");
+                Logger.Log("Press any key to exit...");
                 Console.ReadKey(true);
             }
         }
 
         static void ShowHelp()
         {
-            Console.WriteLine($"usage: {AppDomain.CurrentDomain.FriendlyName} <executable-file> <global-metadata> <output-directory>");
+            Logger.Log($"usage: {AppDomain.CurrentDomain.FriendlyName} <executable-file> <global-metadata> <output-directory>");
         }
 
         private static bool Init(string il2cppPath, string metadataPath, out Metadata metadata, out Il2Cpp il2Cpp)
         {
-            Console.WriteLine("Initializing metadata...");
+            Logger.Log("Initializing metadata...");
             var metadataBytes = File.ReadAllBytes(metadataPath);
             metadata = new Metadata(new MemoryStream(metadataBytes));
-            Console.WriteLine($"Metadata Version: {metadata.Version}");
+            Logger.Log($"Metadata Version: {metadata.Version}");
 
-            Console.WriteLine("Initializing il2cpp file...");
+            Logger.Log("Initializing il2cpp file...");
             var il2cppBytes = File.ReadAllBytes(il2cppPath);
             var il2cppMagic = BitConverter.ToUInt32(il2cppBytes, 0);
             var il2CppMemory = new MemoryStream(il2cppBytes);
@@ -161,7 +161,7 @@ namespace Il2CppDumper
                         var fat = machofat.fats[i];
                         Console.Write(fat.magic == 0xFEEDFACF ? $"{i + 1}.64bit " : $"{i + 1}.32bit ");
                     }
-                    Console.WriteLine();
+                    Logger.Log();
                     var key = Console.ReadKey(true);
                     var index = int.Parse(key.KeyChar.ToString()) - 1;
                     var magic = machofat.fats[index % 2].magic;
@@ -180,13 +180,13 @@ namespace Il2CppDumper
             }
             var version = config.ForceIl2CppVersion ? config.ForceVersion : metadata.Version;
             il2Cpp.SetProperties(version, metadata.metadataUsagesCount);
-            Console.WriteLine($"Il2Cpp Version: {il2Cpp.Version}");
+            Logger.Log($"Il2Cpp Version: {il2Cpp.Version}");
             if (config.ForceDump || il2Cpp.CheckDump())
             {
                 if (il2Cpp is ElfBase elf)
                 {
-                    Console.WriteLine("Detected this may be a dump file.");
-                    Console.WriteLine("Input il2cpp dump address or input 0 to force continue:");
+                    Logger.Log("Detected this may be a dump file.");
+                    Logger.Log("Input il2cpp dump address or input 0 to force continue:");
                     var DumpAddr = Convert.ToUInt64(Console.ReadLine(), 16);
                     if (DumpAddr != 0)
                     {
@@ -204,7 +204,7 @@ namespace Il2CppDumper
                 }
             }
 
-            Console.WriteLine("Searching...");
+            Logger.Log("Searching...");
             try
             {
                 var flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);
@@ -212,7 +212,7 @@ namespace Il2CppDumper
                 {
                     if (!flag && il2Cpp is PE)
                     {
-                        Console.WriteLine("Use custom PE loader");
+                        Logger.Log("Use custom PE loader");
                         il2Cpp = PELoader.Load(il2cppPath);
                         il2Cpp.SetProperties(version, metadata.metadataUsagesCount);
                         flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);
@@ -228,7 +228,7 @@ namespace Il2CppDumper
                 }
                 if (!flag)
                 {
-                    Console.WriteLine("ERROR: Can't use auto mode to process file, try manual mode.");
+                    Logger.Log("ERROR: Can't use auto mode to process file, try manual mode.");
                     Console.Write("Input CodeRegistration: ");
                     var codeRegistration = Convert.ToUInt64(Console.ReadLine(), 16);
                     Console.Write("Input MetadataRegistration: ");
@@ -244,8 +244,8 @@ namespace Il2CppDumper
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
-                Console.WriteLine("ERROR: An error occurred while processing.");
+                Logger.Log(e);
+                Logger.Log("ERROR: An error occurred while processing.");
                 return false;
             }
             return true;
@@ -253,23 +253,23 @@ namespace Il2CppDumper
 
         private static void Dump(Metadata metadata, Il2Cpp il2Cpp, string outputDir)
         {
-            Console.WriteLine("Dumping...");
+            Logger.Log("Dumping...");
             var executor = new Il2CppExecutor(metadata, il2Cpp);
             var decompiler = new Il2CppDecompiler(executor);
             decompiler.Decompile(config, outputDir);
-            Console.WriteLine("Done!");
+            Logger.Log("Done!");
             if (config.GenerateStruct)
             {
-                Console.WriteLine("Generate struct...");
+                Logger.Log("Generate struct...");
                 var scriptGenerator = new StructGenerator(executor);
                 scriptGenerator.WriteScript(outputDir);
-                Console.WriteLine("Done!");
+                Logger.Log("Done!");
             }
             if (config.GenerateDummyDll)
             {
-                Console.WriteLine("Generate dummy dll...");
+                Logger.Log("Generate dummy dll...");
                 DummyAssemblyExporter.Export(executor, outputDir, config.DummyDllAddToken);
-                Console.WriteLine("Done!");
+                Logger.Log("Done!");
             }
         }
     }

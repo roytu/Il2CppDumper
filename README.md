@@ -1,6 +1,6 @@
 # Il2CppDumper
 
-[![Build status](https://ci.appveyor.com/api/projects/status/anhqw33vcpmp8ofa?svg=true)](https://ci.appveyor.com/project/Perfare/il2cppdumper/branch/master/artifacts)
+![](https://i.imgur.com/gYC0i5S.png)
 
 中文说明请戳[这里](README.zh-CN.md)
 
@@ -120,3 +120,4 @@ If you have a rooted Android phone, you can try my other project [Zygisk-Il2CppD
 ## Credits
 
 - Jumboperson - [Il2CppDumper](https://github.com/Jumboperson/Il2CppDumper)
+- AndnixSH - [Il2CppDumper-GUI](https://github.com/AndnixSH/Il2CppDumper-GUI)

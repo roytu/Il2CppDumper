@@ -1,6 +1,6 @@
 # Il2CppDumper
 
-[![Build status](https://ci.appveyor.com/api/projects/status/anhqw33vcpmp8ofa?svg=true)](https://ci.appveyor.com/project/Perfare/il2cppdumper/branch/master/artifacts)
+![](https://i.imgur.com/gYC0i5S.png)
 
 Unity il2cpp逆向工程
 
@@ -114,3 +114,4 @@ Il2CppDumper检测到可执行文件已被保护，使用`GameGuardian`从游戏
 ## 感谢
 
 - Jumboperson - [Il2CppDumper](https://github.com/Jumboperson/Il2CppDumper)
+- AndnixSH - [Il2CppDumper-GUI](https://github.com/AndnixSH/Il2CppDumper-GUI)

@@ -1,0 +1,90 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch: 
+    
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      solution-name: Il2CppDumper.sln
+      config: Release
+      dotnet: 9.0.x
+      cli-proj-file: Il2CppDumper\Il2CppDumper.csproj
+      cli-build-dir: net9.0
+      gui-proj-file: Il2CppDumper.WinForms\Il2CppDumper.WinForms.csproj
+      gui-build-dir: net9.0-windows
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4.2.2
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET ${{ env.dotnet }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.dotnet }}
+
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2.0.0
+    
+    - name: Restore NuGet packages
+      run: nuget restore ${{ env.solution-name }}
+      
+    - name: Build CLI for release
+      run: msbuild ${{ env.cli-proj-file }} -t:rebuild -p:Configuration=${{ env.config }} -p:TargetFramework=${{ env.cli-build-dir }}
+
+    - name: Build GUI for release
+      run: msbuild ${{ env.gui-proj-file }} -t:rebuild -p:Configuration=${{ env.config }} -p:TargetFramework=${{ env.gui-build-dir }}
+      
+    - name: Generate release data
+      shell: bash
+      run: |
+        export LC_ALL=en_US.utf8
+        GIT_COMMIT_ID=$(echo "${{ github.sha }}" | cut -c 1-7)
+        UPDATE_TIME=$(echo ${{ github.event.repository.updated_at }} | sed 's/[:-]//g')
+        echo "tag_name=v${UPDATE_TIME}" >> $GITHUB_ENV
+        echo "release_name=${UPDATE_TIME} (${GIT_COMMIT_ID})" >> $GITHUB_ENV
+        echo "cli_zip_name=Il2CppDumper-CLI-${UPDATE_TIME}_${GIT_COMMIT_ID}.zip" >> $GITHUB_ENV
+        echo "gui_zip_name=Il2CppDumper-GUI-${UPDATE_TIME}_${GIT_COMMIT_ID}.zip" >> $GITHUB_ENV
+        
+    - name: Create package directories
+      run: |
+        New-Item -ItemType Directory -Path C:\builtfiles\CLI -Force > $null
+        New-Item -ItemType Directory -Path C:\builtfiles\GUI -Force > $null
+
+    - name: Copy CLI release files
+      run: Copy-Item -Path Il2CppDumper\bin\Release\${{ env.cli-build-dir }}\* -Destination C:\builtfiles\CLI -Recurse
+
+    - name: Copy GUI release files
+      run: Copy-Item -Path Il2CppDumper.WinForms\bin\Release\${{ env.gui-build-dir }}\* -Destination C:\builtfiles\GUI -Recurse
+
+    - name: Create release archives
+      run: |
+        Compress-Archive -Path C:\builtfiles\CLI\* -DestinationPath C:\builtfiles\${{ env.cli_zip_name }} -Force
+        Compress-Archive -Path C:\builtfiles\GUI\* -DestinationPath C:\builtfiles\${{ env.gui_zip_name }} -Force
+
+    - name: Upload packaged artifacts
+      uses: actions/upload-artifact@v4.6.2
+      with:
+        name: packaged-release-assets
+        path: |
+          C:\builtfiles\${{ env.cli_zip_name }}
+          C:\builtfiles\${{ env.gui_zip_name }}
+        if-no-files-found: error
+        
+    - name: Release with notes
+      uses: softprops/action-gh-release@v2
+      with:
+        name: ${{ env.release_name }}
+        tag_name: ${{ env.tag_name }}
+        generate_release_notes: true
+        overwrite_files: false
+        files: |
+          C:\builtfiles\${{ env.cli_zip_name }}
+          C:\builtfiles\${{ env.gui_zip_name }}
