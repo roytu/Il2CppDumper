@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -193,10 +193,12 @@ namespace Il2CppDumper
         public string GetGenericContainerParams(Il2CppGenericContainer genericContainer)
         {
             var genericParameterNames = new List<string>();
+            Console.WriteLine($"[DEBUG-CONTAINER] ownerIndex={genericContainer.ownerIndex}, type_argc={genericContainer.type_argc}, is_method={genericContainer.is_method}, genericParameterStart={genericContainer.genericParameterStart}");
             for (int i = 0; i < genericContainer.type_argc; i++)
             {
                 var genericParameterIndex = genericContainer.genericParameterStart + i;
                 var genericParameter = metadata.genericParameters[genericParameterIndex];
+                Console.WriteLine($"  [DEBUG-GP] index={genericParameterIndex}, ownerIndex={genericParameter.ownerIndex}, nameIndex={genericParameter.nameIndex}");
                 genericParameterNames.Add(metadata.GetStringFromIndex(genericParameter.nameIndex));
             }
             return $"<{string.Join(", ", genericParameterNames)}>";

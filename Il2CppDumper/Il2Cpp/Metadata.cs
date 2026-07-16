@@ -323,7 +323,7 @@ namespace Il2CppDumper
         {
             if (!stringCache.TryGetValue(index, out var result))
             {
-                result = ReadStringToNull((Version <= 35 ? header.stringOffset : header.strings.offset) + index);
+                result = ReadStringToNull((Version < 38 ? header.stringOffset : header.strings.offset) + index);
                 stringCache.Add(index, result);
             }
             return result;
