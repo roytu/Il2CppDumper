@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -206,6 +206,8 @@ namespace Il2CppDumper
         public Il2CppSectionMetadata interfaceOffsets; // Il2CppInterfaceOffsetPair
         [Version(Min = 38)]
         public Il2CppSectionMetadata typeDefinitions; // Il2CppTypeDefinition
+        [Version(Min = 39)]
+        public Il2CppSectionMetadata typeInlineArrays; // Il2CppInlineArrayLength
         [Version(Min = 38)]
         public Il2CppSectionMetadata images; // Il2CppImageDefinition
         [Version(Min = 38)]
@@ -383,11 +385,12 @@ namespace Il2CppDumper
         public uint nameIndex;
         public TypeDefinitionIndex declaringType;
         public TypeIndex returnType;
-        [Version(Min = 31)]
+        [Version(Min = 31, Max = 38)]
         public int returnParameterToken;
         public ParameterIndex parameterStart;
         [Version(Max = 24)]
         public int customAttributeIndex;
+        [Version(Max = 38)]
         public GenericContainerIndex genericContainerIndex;
         [Version(Max = 24.1)]
         public int methodIndex;
@@ -400,9 +403,13 @@ namespace Il2CppDumper
         [Version(Max = 24.1)]
         public int rgctxCount;
         public uint token;
+        [Version(Max = 38)]
         public ushort flags;
+        [Version(Max = 38)]
         public ushort iflags;
+        [Version(Max = 38)]
         public ushort slot;
+        [Version(Max = 38)]
         public ushort parameterCount;
     }
 

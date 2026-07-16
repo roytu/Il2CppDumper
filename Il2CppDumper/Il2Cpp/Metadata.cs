@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -66,6 +66,54 @@ namespace Il2CppDumper
             }
             Version = version;
             header = ReadClass<Il2CppGlobalMetadataHeader>(0);
+            if (version == 39)
+            {
+                Position = 8;
+                var sections = new Il2CppSectionMetadata[32];
+                for (int i = 0; i < 32; i++)
+                {
+                    sections[i] = ReadClass<Il2CppSectionMetadata>();
+                    sections[i].offset ^= 0xA5C3F19D;
+                    sections[i].size ^= 0xA5C3F19D;
+                    sections[i].count ^= 0xA5C3F19D;
+                }
+
+                header.strings = sections[0];
+                header.stringLiteralData = sections[11];
+                header.stringLiterals = sections[2];
+                header.events = sections[3];
+                header.properties = sections[4];
+                header.methods = sections[5];
+                header.fieldAndParameterDefaultValueData = sections[6];
+                header.fieldDefaultValues = sections[7];
+                header.parameterDefaultValues = sections[8];
+                header.fieldMarshaledSizes = sections[9];
+                header.attributeData = sections[10];
+                header.genericContainers = sections[25];
+                header.genericParameters = sections[12];
+                header.images = sections[14];
+                header.parameters = sections[15];
+                header.vtableMethods = sections[16];
+                header.assemblies = sections[17];
+                header.typeDefinitions = sections[18];
+                header.nestedTypes = sections[19];
+                header.typeInlineArrays = sections[20];
+                header.interfaces = sections[21];
+                header.interfaceOffsets = sections[21];
+                header.fieldRefs = sections[22];
+                header.referencedAssemblies = sections[24];
+                header.windowsRuntimeTypeNames = sections[23];
+                header.genericParameterConstraints = sections[13];
+                header.attributeDataRanges = sections[26];
+                header.unresolvedIndirectCallParameterTypes = sections[27];
+                header.unresolvedIndirectCallParameterRanges = sections[28];
+                header.fields = sections[29];
+                header.windowsRuntimeStrings = sections[30];
+                header.exportedTypeDefinitions = sections[31];
+                Console.WriteLine($"[DEBUG IN RE-MAP] Version={Version}, version={version}");
+                Console.WriteLine($"[DEBUG IN RE-MAP] sections[21] offset={sections[21].offset}, size={sections[21].size}");
+                Console.WriteLine($"[DEBUG IN RE-MAP] header.interfaces offset={header.interfaces.offset}, size={header.interfaces.size}");
+            }
             if (version == 24)
             {
                 if (header.stringLiteralOffset == 264)
@@ -146,6 +194,14 @@ namespace Il2CppDumper
             parameterDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppParameterDefinition>(header.parametersOffset, header.parametersSize)
                 : ReadMetadataClassArray<Il2CppParameterDefinition>(header.parameters.offset, (int)header.parameters.size);
+            if (Version >= 39)
+            {
+                for (int i = 0; i < methodDefs.Length; i++)
+                {
+                    int nextStart = (i < methodDefs.Length - 1) ? (int)methodDefs[i + 1].parameterStart : parameterDefs.Length;
+                    methodDefs[i].parameterCount = (ushort)(nextStart - methodDefs[i].parameterStart);
+                }
+            }
             fieldDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppFieldDefinition>(header.fieldsOffset, header.fieldsSize)
                 : ReadMetadataClassArray<Il2CppFieldDefinition>(header.fields.offset, (int)header.fields.size);
@@ -160,6 +216,7 @@ namespace Il2CppDumper
             propertyDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppPropertyDefinition>(header.propertiesOffset, header.propertiesSize)
                 : ReadMetadataClassArray<Il2CppPropertyDefinition>(header.properties.offset, (int)header.properties.size);
+            Console.WriteLine($"[DEBUG] header.interfaces.offset={header.interfaces.offset}, size={header.interfaces.size}");
             interfaceOffsetPairs = Version < 38
                 ? ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfacesOffset, header.interfacesSize)
                 : ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfaces.offset, (int)header.interfaces.size);
@@ -220,11 +277,11 @@ namespace Il2CppDumper
                     {
                         if (Version >= 29)
                         {
-                            dic.Add(attributeDataRanges[i].token, i);
+                            dic.TryAdd(attributeDataRanges[i].token, i);
                         }
                         else
                         {
-                            dic.Add(attributeTypeRanges[i].token, i);
+                            dic.TryAdd(attributeTypeRanges[i].token, i);
                         }
                     }
                 }
