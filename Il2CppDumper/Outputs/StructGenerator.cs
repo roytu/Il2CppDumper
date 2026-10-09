@@ -279,7 +279,7 @@ namespace Il2CppDumper
                         {
                             var encodedToken = (uint)metadataValue;
                             var usage = Metadata.GetEncodedIndexType(encodedToken);
-                            if (usage > 0 && usage <= 6)
+                            if (usage > 0 && usage <= 7)
                             {
                                 var decodedIndex = metadata.GetDecodedMethodIndex(encodedToken);
                                 if (metadataValue == ((usage << 29) | (decodedIndex << 1)) + 1)
@@ -325,6 +325,12 @@ namespace Il2CppDumper
                                                 if (decodedIndex < il2Cpp.methodSpecs.Length)
                                                 {
                                                     AddMetadataUsageMethodRef(json, decodedIndex, va);
+                                                }
+                                                break;
+                                            case Il2CppMetadataUsage.kIl2CppMetadataUsageFieldRva:
+                                                if (decodedIndex < metadata.fieldRefs.Length)
+                                                {
+                                                    AddMetadataUsageFieldInfo(json, decodedIndex, va, "FieldRva$");
                                                 }
                                                 break;
                                         }
@@ -482,7 +488,7 @@ namespace Il2CppDumper
             }
         }
 
-        private void AddMetadataUsageFieldInfo(ScriptJson json, uint index, ulong address)
+        private void AddMetadataUsageFieldInfo(ScriptJson json, uint index, ulong address, string prefix = "Field$")
         {
             var fieldRef = metadata.fieldRefs[index];
             var type = il2Cpp.types[fieldRef.typeIndex];
@@ -492,7 +498,7 @@ namespace Il2CppDumper
             var scriptMetadata = new ScriptMetadata();
             json.ScriptMetadata.Add(scriptMetadata);
             scriptMetadata.Address = il2Cpp.GetRVA(address);
-            scriptMetadata.Name = "Field$" + fieldName;
+            scriptMetadata.Name = prefix + fieldName;
         }
 
         private void AddMetadataUsageStringLiteral(ScriptJson json, uint index, ulong address)
