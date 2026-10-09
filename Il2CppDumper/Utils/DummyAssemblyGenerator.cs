@@ -158,7 +158,7 @@ namespace Il2CppDumper
                     //interfaces
                     for (int i = 0; i < typeDef.interfaces_count; i++)
                     {
-                        var interfaceType = il2Cpp.types[metadata.interfaceOffsetPairs[i].interfaceTypeIndex];
+                        var interfaceType = il2Cpp.types[metadata.interfaceIndices[typeDef.interfacesStart + i]];
                         var interfaceTypeRef = GetTypeReference(typeDefinition, interfaceType);
                         typeDefinition.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
                     }
