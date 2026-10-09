@@ -270,11 +270,13 @@ namespace Il2CppDumper
         public uint nameIndex;
         public int assemblyIndex;
 
-        public TypeDefinitionIndex typeStart;
+        [Index(IndexKind.TypeDefinition)]
+        public int typeStart;
         public uint typeCount;
 
         [Version(Min = 24)]
-        public TypeDefinitionIndex exportedTypeStart;
+        [Index(IndexKind.TypeDefinition)]
+        public int exportedTypeStart;
         [Version(Min = 24)]
         public uint exportedTypeCount;
 
@@ -294,12 +296,15 @@ namespace Il2CppDumper
         public uint namespaceIndex;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        public TypeIndex byvalTypeIndex;
+        [Index(IndexKind.Type)]
+        public int byvalTypeIndex;
         [Version(Max = 24.5)]
         public int byrefTypeIndex;
 
-        public TypeIndex declaringTypeIndex;
-        public TypeIndex parentIndex;
+        [Index(IndexKind.Type)]
+        public int declaringTypeIndex;
+        [Index(IndexKind.Type)]
+        public int parentIndex;
         [Version(Max = 31)]
         public int elementTypeIndex; // we can probably remove this one. Only used for enums
 
@@ -308,7 +313,8 @@ namespace Il2CppDumper
         [Version(Max = 24.1)]
         public int rgctxCount;
 
-        public GenericContainerIndex genericContainerIndex;
+        [Index(IndexKind.GenericContainer)]
+        public int genericContainerIndex;
 
         [Version(Max = 22)]
         public int delegateWrapperFromManagedToNativeIndex;
@@ -382,14 +388,18 @@ namespace Il2CppDumper
     public class Il2CppMethodDefinition
     {
         public uint nameIndex;
-        public TypeDefinitionIndex declaringType;
-        public TypeIndex returnType;
+        [Index(IndexKind.TypeDefinition)]
+        public int declaringType;
+        [Index(IndexKind.Type)]
+        public int returnType;
         [Version(Min = 31)]
         public int returnParameterToken;
-        public ParameterIndex parameterStart;
+        [Index(IndexKind.Parameter)]
+        public int parameterStart;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        public GenericContainerIndex genericContainerIndex;
+        [Index(IndexKind.GenericContainer)]
+        public int genericContainerIndex;
         [Version(Max = 24.1)]
         public int methodIndex;
         [Version(Max = 24.1)]
@@ -413,13 +423,15 @@ namespace Il2CppDumper
         public uint token;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
     }
 
     public class Il2CppFieldDefinition
     {
         public uint nameIndex;
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
         [Version(Max = 24)]
         public int customAttributeIndex;
         [Version(Min = 19)]
@@ -429,7 +441,8 @@ namespace Il2CppDumper
     public class Il2CppFieldDefaultValue
     {
         public int fieldIndex;
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
         public int dataIndex;
     }
 
@@ -447,7 +460,8 @@ namespace Il2CppDumper
 
     public class Il2CppInterfaceOffsetPair
     {
-        public TypeIndex interfaceTypeIndex;
+        [Index(IndexKind.Type)]
+        public int interfaceTypeIndex;
         public int offset;
     }
 
@@ -481,15 +495,18 @@ namespace Il2CppDumper
 
     public class Il2CppParameterDefaultValue
     {
-        public ParameterIndex parameterIndex;
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Parameter)]
+        public int parameterIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
         public int dataIndex;
     }
 
     public class Il2CppEventDefinition
     {
         public uint nameIndex;
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
         public int add;
         public int remove;
         public int raise;
@@ -512,13 +529,15 @@ namespace Il2CppDumper
 
     public class Il2CppFieldRef
     {
-        public TypeIndex typeIndex;
+        [Index(IndexKind.Type)]
+        public int typeIndex;
         public int fieldIndex; // local offset into type fields
     }
 
     public class Il2CppGenericParameter
     {
-        public GenericContainerIndex ownerIndex;  /* Type or method this parameter was defined in. */
+        [Index(IndexKind.GenericContainer)]
+        public int ownerIndex;  /* Type or method this parameter was defined in. */
         public uint nameIndex;
         public short constraintsStart;
         public short constraintsCount;
@@ -527,7 +546,8 @@ namespace Il2CppDumper
     }
     public class Il2CppConstraintIndex
     {
-        public TypeIndex index;
+        [Index(IndexKind.Type)]
+        public int index;
     }
 
     public enum Il2CppRGCTXDataType
@@ -575,60 +595,5 @@ namespace Il2CppDumper
     {
         public uint token;
         public uint startOffset;
-    }
-
-    // Types with custom deserialization rules
-    public interface ICustomType
-    {}
-
-    public class TypeIndex : ICustomType
-    {
-        public int value;
-        public TypeIndex(int value)
-        {
-            this.value = value;
-        }
-        public static implicit operator int(TypeIndex type)
-        {
-            return type.value;
-        }
-    }
-
-    public class TypeDefinitionIndex : ICustomType
-    {
-        public int value;
-        public TypeDefinitionIndex(int value)
-        {
-            this.value = value;
-        }
-        public static implicit operator int(TypeDefinitionIndex typeDef)
-        {
-            return typeDef.value;
-        }
-    }
-
-    public class GenericContainerIndex : ICustomType
-    {
-        public int value;
-        public GenericContainerIndex(int value)
-        {
-            this.value = value;
-        }
-        public static implicit operator int(GenericContainerIndex genericContainer)
-        {
-            return genericContainer.value;
-        }
-    }
-    public class ParameterIndex : ICustomType
-    {
-        public int value;
-        public ParameterIndex(int value)
-        {
-            this.value = value;
-        }
-        public static implicit operator int(ParameterIndex parameter)
-        {
-            return parameter.value;
-        }
     }
 }

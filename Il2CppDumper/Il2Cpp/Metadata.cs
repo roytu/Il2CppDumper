@@ -18,7 +18,7 @@ namespace Il2CppDumper
         public Il2CppParameterDefinition[] parameterDefs;
         public Il2CppFieldDefinition[] fieldDefs;
         private readonly Dictionary<int, Il2CppFieldDefaultValue> fieldDefaultValuesDic;
-        private readonly Dictionary<ParameterIndex, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
+        private readonly Dictionary<int, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
         public Il2CppPropertyDefinition[] propertyDefs;
         public Il2CppCustomAttributeTypeRange[] attributeTypeRanges;
         public Il2CppCustomAttributeDataRange[] attributeDataRanges;
@@ -40,13 +40,6 @@ namespace Il2CppDumper
         public Il2CppRGCTXDefinition[] rgctxEntries;
 
         private readonly Dictionary<uint, string> stringCache = new();
-
-        // Types with custom sizes
-        // Keep in sync with vm/MetadataDeserialization.h
-        public static int typeIndexSize;
-        public static int typeDefinitionIndexSize;
-        public static int genericContainerIndexSize;
-        public static int parameterIndexSize;
 
         public Metadata(Stream stream) : base(stream)
         {
@@ -83,36 +76,7 @@ namespace Il2CppDumper
                 }
             }
 
-            // Set custom sizes
-            if (Version >= 38)
-            {
-                // Current definition of Il2CppParameterDefinition has size 8 (not counting typeIndex);
-                //
-                //  public class Il2CppParameterDefinition
-                //  {
-                //      public uint nameIndex;
-                //      public uint token;
-                //      [Version(Max = 24)]
-                //      public int customAttributeIndex;
-                //      public TypeIndex typeIndex;
-                //  }
-                //
-                // By computing the size of this as reported by the header, we can infer TypeIndex size
-
-                int sizeOfIl2CppParameterDefinition = (int)(header.parameters.size / header.parameters.count);
-                typeIndexSize = sizeOfIl2CppParameterDefinition - 8;
-                typeDefinitionIndexSize = GetIndexSize((int)header.typeDefinitions.count);
-                genericContainerIndexSize = GetIndexSize((int)header.genericContainers.count);
-                parameterIndexSize = GetIndexSize((int)header.parameters.count);
-            }
-            else
-            {
-                // Before version 38, these were always ints
-                typeIndexSize = 4;
-                typeDefinitionIndexSize = 4;
-                genericContainerIndexSize = 4;
-                parameterIndexSize = 4;
-            }
+            InitIndexSizes();
 
             imageDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppImageDefinition>(header.imagesOffset, header.imagesSize)
@@ -235,6 +199,30 @@ namespace Il2CppDumper
             }
         }
 
+        // Keep in sync with SerializedIndexSizes in vm/GlobalMetadata.cpp
+        private void InitIndexSizes()
+        {
+            if (Version < 38)
+            {
+                return;
+            }
+            // TypeIndex size comes from the binary's typesCount, infer it from the stride of the interfaces section instead
+            if (header.interfaces.count > 0)
+            {
+                IndexSizes[(int)IndexKind.Type] = (int)(header.interfaces.size / header.interfaces.count);
+            }
+            else if (header.fields.count > 0)
+            {
+                IndexSizes[(int)IndexKind.Type] = (int)(header.fields.size / header.fields.count) - 8;
+            }
+            IndexSizes[(int)IndexKind.TypeDefinition] = GetIndexSize((int)header.typeDefinitions.count);
+            IndexSizes[(int)IndexKind.GenericContainer] = GetIndexSize((int)header.genericContainers.count);
+            if (Version >= 39)
+            {
+                IndexSizes[(int)IndexKind.Parameter] = GetIndexSize((int)header.parameters.count);
+            }
+        }
+
         public static int GetIndexSize(int count)
         {
             if (count <= 0xFF) return 1;
@@ -254,7 +242,7 @@ namespace Il2CppDumper
 
         public bool GetParameterDefaultValueFromIndex(int index, out Il2CppParameterDefaultValue value)
         {
-            return parameterDefaultValuesDic.TryGetValue(new ParameterIndex(index), out value);
+            return parameterDefaultValuesDic.TryGetValue(index, out value);
         }
 
         public uint GetDefaultValueFromIndex(int index)
@@ -361,8 +349,13 @@ namespace Il2CppDumper
                     if (Version < attr.Min || Version > attr.Max)
                         continue;
                 }
+                var indexAttribute = i.GetCustomAttribute<IndexAttribute>();
                 var fieldType = i.FieldType;
-                if (fieldType.IsPrimitive)
+                if (indexAttribute != null)
+                {
+                    size += IndexSizes[(int)indexAttribute.Kind];
+                }
+                else if (fieldType.IsPrimitive)
                 {
                     size += GetPrimitiveTypeSize(fieldType.Name);
                 }
@@ -375,22 +368,6 @@ namespace Il2CppDumper
                 {
                     var arrayLengthAttribute = i.GetCustomAttribute<ArrayLengthAttribute>();
                     size += arrayLengthAttribute.Length;
-                }
-                else if (fieldType == typeof(TypeIndex))
-                {
-                    size += typeIndexSize;
-                }
-                else if (fieldType == typeof(TypeDefinitionIndex))
-                {
-                    size += typeDefinitionIndexSize;
-                }
-                else if (fieldType == typeof(GenericContainerIndex))
-                {
-                    size += genericContainerIndexSize;
-                }
-                else if (fieldType == typeof(ParameterIndex))
-                {
-                    size += parameterIndexSize;
                 }
                 else
                 {
