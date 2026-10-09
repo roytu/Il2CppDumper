@@ -142,7 +142,13 @@ namespace Il2CppDumper
                     }
 
                     //parent
-                    if (typeDef.parentIndex >= 0)
+                    if (typeDef.IsEnum && typeDef.GetEnumElementTypeIndex(il2Cpp.Version) == typeDef.parentIndex)
+                    {
+                        // parentIndex of an enum is its element type here, the runtime forces System.Enum
+                        var enumType = new TypeReference("System", "Enum", typeDefinition.Module, typeDefinition.Module.TypeSystem.CoreLibrary);
+                        typeDefinition.BaseType = typeDefinition.Module.ImportReference(enumType);
+                    }
+                    else if (typeDef.parentIndex >= 0)
                     {
                         var parentType = il2Cpp.types[typeDef.parentIndex];
                         var parentTypeRef = GetTypeReference(typeDefinition, parentType);
