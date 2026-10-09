@@ -55,7 +55,7 @@ namespace Il2CppDumper
                         {
                             for (int i = 0; i < typeDef.interfaces_count; i++)
                             {
-                                var @interface = il2Cpp.types[metadata.interfaceOffsetPairs[i].interfaceTypeIndex];
+                                var @interface = il2Cpp.types[metadata.interfaceIndices[typeDef.interfacesStart + i]];
                                 extends.Add(executor.GetTypeName(@interface, false, false));
                             }
                         }
