@@ -27,7 +27,7 @@ namespace Il2CppDumper
         public string GetStringCustomAttributeData()
         {
             BaseStream.Position = ctorBuffer;
-            var ctorIndex = ReadInt32();
+            var ctorIndex = ResolveCtorIndex(ReadUInt32());
             var methodDef = metadata.methodDefs[ctorIndex];
             var typeDef = metadata.typeDefs[methodDef.declaringType];
             ctorBuffer = BaseStream.Position;
@@ -105,7 +105,7 @@ namespace Il2CppDumper
             for (int i = 0; i < Count; i++)
             {
                 ctors[i] = new CustomAttributeReaderVisitor();
-                ctors[i].CtorIndex = (int)ReadUInt32();
+                ctors[i].CtorIndex = ResolveCtorIndex(ReadUInt32());
             }
 
             BaseStream.Position = dataBuffer;
@@ -168,9 +168,42 @@ namespace Il2CppDumper
             memberIndex = -(memberIndex + 1);
 
             var typeIndex = this.ReadCompressedUInt32();
-            var declaringClass = metadata.typeDefs[typeIndex];
+            // Version 106+: TypeIndex instead of TypeDefinitionIndex
+            var declaringClass = metadata.Version >= 106
+                ? GetTypeDefinition(executor.il2Cpp.types[typeIndex])
+                : metadata.typeDefs[typeIndex];
 
             return (declaringClass, memberIndex);
+        }
+
+        private Il2CppTypeDefinition GetTypeDefinition(Il2CppType il2CppType)
+        {
+            if (il2CppType.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST)
+            {
+                var genericClass = executor.il2Cpp.MapVATR<Il2CppGenericClass>(il2CppType.data.generic_class);
+                return executor.GetGenericClassTypeDefinition(genericClass);
+            }
+            return executor.GetTypeDefinitionFromIl2CppType(il2CppType);
+        }
+
+        // Version 106+: EncodedMethodIndex instead of MethodIndex
+        private int ResolveCtorIndex(uint raw)
+        {
+            if (metadata.Version < 106)
+            {
+                return (int)raw;
+            }
+            var usage = (Il2CppMetadataUsage)Metadata.GetEncodedIndexType(raw);
+            var index = (int)metadata.GetDecodedMethodIndex(raw);
+            switch (usage)
+            {
+                case Il2CppMetadataUsage.kIl2CppMetadataUsageMethodDef:
+                    return index;
+                case Il2CppMetadataUsage.kIl2CppMetadataUsageMethodRef:
+                    return executor.il2Cpp.methodSpecs[index].methodDefinitionIndex;
+                default:
+                    throw new InvalidDataException($"Unexpected custom attribute ctor encoding 0x{raw:X8}");
+            }
         }
     }
 }
