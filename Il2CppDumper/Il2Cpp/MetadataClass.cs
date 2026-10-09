@@ -165,6 +165,7 @@ namespace Il2CppDumper
         [Version(Min = 24, Max = 35)]
         public int exportedTypeDefinitionsOffset; // TypeDefinitionIndex
         [Version(Min = 24, Max = 35)]
+        public int exportedTypeDefinitionsSize;
 
         [Version(Min = 38)]
         public Il2CppSectionMetadata stringLiterals; // string data for managed code
