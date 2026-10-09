@@ -430,6 +430,10 @@ namespace Il2CppDumper
                 case 39:
                     sb.Append(HeaderConstants.HeaderV29);
                     break;
+                case 106:
+                case 107:
+                    sb.Append(HeaderConstants.HeaderV106);
+                    break;
                 default:
                     Console.WriteLine($"WARNING: This il2cpp version [{il2Cpp.Version}] does not support generating .h files");
                     return;

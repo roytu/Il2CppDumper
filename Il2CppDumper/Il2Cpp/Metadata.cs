@@ -54,7 +54,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 39)
+            if (version < 16 || version > 106 || (version > 39 && version < 106))
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -225,6 +225,17 @@ namespace Il2CppDumper
             {
                 IndexSizes[(int)IndexKind.Parameter] = GetIndexSize((int)header.parameters.count);
             }
+            if (Version >= 106)
+            {
+                IndexSizes[(int)IndexKind.GenericParameter] = GetIndexSize((int)header.genericParameters.count);
+                IndexSizes[(int)IndexKind.Interfaces] = GetIndexSize((int)header.interfaceOffsets.count);
+                IndexSizes[(int)IndexKind.Event] = GetIndexSize((int)header.events.count);
+                IndexSizes[(int)IndexKind.Property] = GetIndexSize((int)header.properties.count);
+                IndexSizes[(int)IndexKind.NestedType] = GetIndexSize((int)header.nestedTypes.count);
+                IndexSizes[(int)IndexKind.Field] = GetIndexSize((int)header.fields.count);
+                IndexSizes[(int)IndexKind.DefaultValueData] = GetIndexSize((int)header.fieldAndParameterDefaultValueData.count);
+                IndexSizes[(int)IndexKind.Method] = GetIndexSize((int)header.methods.count);
+            }
         }
 
         public static int GetIndexSize(int count)
@@ -387,6 +398,7 @@ namespace Il2CppDumper
             {
                 "Int32" or "UInt32" => 4,
                 "Int16" or "UInt16" => 2,
+                "Byte" => 1,
                 _ => 0,
             };
         }

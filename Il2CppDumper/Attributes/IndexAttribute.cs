@@ -10,9 +10,17 @@ namespace Il2CppDumper
     public enum IndexKind
     {
         Type,
+        GenericParameter,
         GenericContainer,
         TypeDefinition,
         Parameter,
+        Interfaces,
+        Event,
+        Property,
+        NestedType,
+        Field,
+        DefaultValueData,
+        Method,
         Count
     }
 
