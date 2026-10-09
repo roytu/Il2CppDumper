@@ -135,6 +135,18 @@ namespace Il2CppDumper
             }
         }
 
+        public int[] ReadIndexArray(IndexKind kind, ulong addr, int byteSize)
+        {
+            Position = addr;
+            var count = byteSize / IndexSizes[(int)kind];
+            var result = new int[count];
+            for (var i = 0; i < count; i++)
+            {
+                result[i] = ReadIndex(kind);
+            }
+            return result;
+        }
+
         public T ReadClass<T>() where T : new()
         {
             var type = typeof(T);

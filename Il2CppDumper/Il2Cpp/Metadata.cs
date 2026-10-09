@@ -27,6 +27,7 @@ namespace Il2CppDumper
         private readonly Il2CppMetadataUsageList[] metadataUsageLists;
         private readonly Il2CppMetadataUsagePair[] metadataUsagePairs;
         public int[] attributeTypes;
+        public int[] interfaceIndices; // TypeIndex, indexed by interfacesStart
         public readonly Il2CppInterfaceOffsetPair[] interfaceOffsetPairs;
         public Dictionary<Il2CppMetadataUsage, SortedDictionary<uint, uint>> metadataUsageDic;
         public long metadataUsagesCount;
@@ -124,9 +125,12 @@ namespace Il2CppDumper
             propertyDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppPropertyDefinition>(header.propertiesOffset, header.propertiesSize)
                 : ReadMetadataClassArray<Il2CppPropertyDefinition>(header.properties.offset, (int)header.properties.size);
+            interfaceIndices = Version < 38
+                ? ReadClassArray<int>(header.interfacesOffset, header.interfacesSize / 4)
+                : ReadIndexArray(IndexKind.Type, header.interfaces.offset, (int)header.interfaces.size);
             interfaceOffsetPairs = Version < 38
-                ? ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfacesOffset, header.interfacesSize)
-                : ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfaces.offset, (int)header.interfaces.size);
+                ? ReadMetadataClassArray<Il2CppInterfaceOffsetPair>((uint)header.interfaceOffsetsOffset, header.interfaceOffsetsSize)
+                : ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfaceOffsets.offset, (int)header.interfaceOffsets.size);
             nestedTypeIndices = Version < 38
                 ? ReadClassArray<int>(header.nestedTypesOffset, header.nestedTypesSize / 4)
                 : ReadClassArray<int>(header.nestedTypes.offset, header.nestedTypes.size / 4);
