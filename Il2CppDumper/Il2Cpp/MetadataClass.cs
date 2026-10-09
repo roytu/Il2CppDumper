@@ -589,6 +589,7 @@ namespace Il2CppDumper
         kIl2CppMetadataUsageFieldInfo,
         kIl2CppMetadataUsageStringLiteral,
         kIl2CppMetadataUsageMethodRef,
+        kIl2CppMetadataUsageFieldRva,
     };
 
     public class Il2CppCustomAttributeDataRange
