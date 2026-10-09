@@ -207,6 +207,8 @@ namespace Il2CppDumper
         public Il2CppSectionMetadata interfaceOffsets; // Il2CppInterfaceOffsetPair
         [Version(Min = 38)]
         public Il2CppSectionMetadata typeDefinitions; // Il2CppTypeDefinition
+        [Version(Min = 106)]
+        public Il2CppSectionMetadata typeInlineArrays; // Il2CppInlineArrayLength
         [Version(Min = 38)]
         public Il2CppSectionMetadata images; // Il2CppImageDefinition
         [Version(Min = 38)]
@@ -280,6 +282,7 @@ namespace Il2CppDumper
         [Version(Min = 24)]
         public uint exportedTypeCount;
 
+        [Index(IndexKind.Method)]
         public int entryPointIndex;
         [Version(Min = 19)]
         public uint token;
@@ -327,13 +330,20 @@ namespace Il2CppDumper
 
         public uint flags;
 
+        [Index(IndexKind.Field)]
         public int fieldStart;
+        [Index(IndexKind.Method)]
         public int methodStart;
+        [Index(IndexKind.Event)]
         public int eventStart;
+        [Index(IndexKind.Property)]
         public int propertyStart;
+        [Index(IndexKind.NestedType)]
         public int nestedTypesStart;
+        [Index(IndexKind.Interfaces)]
         public int interfacesStart;
         public int vtableStart;
+        [Index(IndexKind.Interfaces)]
         public int interfaceOffsetsStart;
 
         public ushort method_count;
@@ -356,6 +366,8 @@ namespace Il2CppDumper
         // 11 - PackingSize is default
         // 12 - ClassSize is default
         // 13-16 - One of nine possible PackingSize values (0, 1, 2, 4, 8, 16, 32, 64, or 128) - the specified packing size (even for explicit layouts)
+        // 17 - IsByRefLike (e.g. ref struct) (v106+)
+        // 18 - HasInlineArray (v106+)
         public uint bitfield;
         [Version(Min = 19)]
         public uint token;
@@ -440,16 +452,20 @@ namespace Il2CppDumper
 
     public class Il2CppFieldDefaultValue
     {
+        [Index(IndexKind.Field)]
         public int fieldIndex;
         [Index(IndexKind.Type)]
         public int typeIndex;
+        [Index(IndexKind.DefaultValueData)]
         public int dataIndex;
     }
 
     public class Il2CppPropertyDefinition
     {
         public uint nameIndex;
+        [Index(IndexKind.Method)]
         public int get;
+        [Index(IndexKind.Method)]
         public int set;
         public uint attrs;
         [Version(Max = 24)]
@@ -499,6 +515,7 @@ namespace Il2CppDumper
         public int parameterIndex;
         [Index(IndexKind.Type)]
         public int typeIndex;
+        [Index(IndexKind.DefaultValueData)]
         public int dataIndex;
     }
 
@@ -507,8 +524,11 @@ namespace Il2CppDumper
         public uint nameIndex;
         [Index(IndexKind.Type)]
         public int typeIndex;
+        [Index(IndexKind.Method)]
         public int add;
+        [Index(IndexKind.Method)]
         public int remove;
+        [Index(IndexKind.Method)]
         public int raise;
         [Version(Max = 24)]
         public int customAttributeIndex;
@@ -520,17 +540,27 @@ namespace Il2CppDumper
     {
         /* index of the generic type definition or the generic method definition corresponding to this container */
         public int ownerIndex; // either index into Il2CppClass metadata array or Il2CppMethodDefinition array
-        public int type_argc;
+        [Version(Max = 39)]
+        public int type_argc_v39;
+        [Version(Min = 106)]
+        public ushort type_argc_v106;
         /* If true, we're a generic method, otherwise a generic type definition. */
+        [Version(Max = 39)]
         public int is_method;
+        [Version(Min = 106)]
+        public byte is_method_v106;
         /* Our type parameters. */
+        [Index(IndexKind.GenericParameter)]
         public int genericParameterStart;
+
+        public int type_argc => type_argc_v106 != 0 ? type_argc_v106 : type_argc_v39;
     }
 
     public class Il2CppFieldRef
     {
         [Index(IndexKind.Type)]
         public int typeIndex;
+        [Index(IndexKind.Field)]
         public int fieldIndex; // local offset into type fields
     }
 
