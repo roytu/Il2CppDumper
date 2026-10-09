@@ -1046,6 +1046,9 @@ namespace Il2CppDumper
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             sb.Append($"\tMethodInfo* _{i}_{rgctx.MethodName};\n");
                             break;
+                        default:
+                            sb.Append($"\tvoid* _{i}_{rgctx.Type.ToString().Replace("IL2CPP_RGCTX_DATA_", "")};\n");
+                            break;
                     }
                 }
                 sb.Append("};\n");
@@ -1360,6 +1363,9 @@ namespace Il2CppDumper
                             break;
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             methodInfoHeader.Append($"\tMethodInfo* _{i}_{rgctx.MethodName};\n");
+                            break;
+                        default:
+                            methodInfoHeader.Append($"\tvoid* _{i}_{rgctx.Type.ToString().Replace("IL2CPP_RGCTX_DATA_", "")};\n");
                             break;
                     }
                 }
