@@ -54,6 +54,7 @@ namespace Il2CppDumper
         public void WriteScript(Config config, string outputDir)
         {
             var json = new ScriptJson();
+            var methodNames = new HashSet<string>(StringComparer.Ordinal);
             // 生成唯一名称
             for (var imageIndex = 0; imageIndex < metadata.imageDefs.Length; imageIndex++)
             {
@@ -117,7 +118,7 @@ namespace Il2CppDumper
                             var scriptMethod = new ScriptMethod();
                             json.ScriptMethod.Add(scriptMethod);
                             scriptMethod.Address = il2Cpp.GetRVA(methodPointer);
-                            var methodFullName = typeName + "$$" + methodName;
+                            var methodFullName = UniqueMethodName(typeName + "$$" + methodName, methodNames);
                             scriptMethod.Name = methodFullName;
 
                             var methodReturnType = il2Cpp.types[methodDef.returnType];
@@ -129,10 +130,16 @@ namespace Il2CppDumper
                             methodTypeSignature.Add(methodReturnType.byref == 1 ? Il2CppTypeEnum.IL2CPP_TYPE_PTR : methodReturnType.type);
                             var signature = $"{returnType} {FixName(methodFullName)} (";
                             var parameterStrs = new List<string>();
+                            var parameterNames = new HashSet<string>(StringComparer.Ordinal);
                             if ((methodDef.flags & METHOD_ATTRIBUTE_STATIC) == 0)
                             {
                                 var thisType = ParseType(il2Cpp.types[typeDef.byvalTypeIndex]);
                                 methodTypeSignature.Add(il2Cpp.types[typeDef.byvalTypeIndex].type);
+                                if (typeDef.IsValueType)
+                                {
+                                    // il2cpp passes a value type's this by pointer
+                                    thisType += "*";
+                                }
                                 parameterStrs.Add($"{thisType} __this");
                             }
                             else if (il2Cpp.Version <= 24)
@@ -151,7 +158,7 @@ namespace Il2CppDumper
                                     parameterCType += "*";
                                 }
                                 methodTypeSignature.Add(parameterType.byref == 1 ? Il2CppTypeEnum.IL2CPP_TYPE_PTR : parameterType.type);
-                                parameterStrs.Add($"{parameterCType} {FixName(parameterName)}");
+                                parameterStrs.Add($"{parameterCType} {ParameterName(parameterName, j, parameterNames)}");
                             }
                             methodTypeSignature.Add(Il2CppTypeEnum.IL2CPP_TYPE_PTR);
                             parameterStrs.Add("const MethodInfo* method");
@@ -181,7 +188,7 @@ namespace Il2CppDumper
                                         GenerateMethodInfo(methodInfoName, structTypeName, GenerateRGCTX(imageName, methodDef));
                                     }
                                     (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
-                                    var methodFullName = methodSpecTypeName + "$$" + methodSpecMethodName;
+                                    var methodFullName = UniqueMethodName(methodSpecTypeName + "$$" + methodSpecMethodName, methodNames);
                                     scriptMethod.Name = methodFullName;
 
                                     var genericContext = executor.GetMethodSpecGenericContext(methodSpec);
@@ -194,6 +201,7 @@ namespace Il2CppDumper
                                     methodTypeSignature.Add(methodReturnType.byref == 1 ? Il2CppTypeEnum.IL2CPP_TYPE_PTR : methodReturnType.type);
                                     var signature = $"{returnType} {FixName(methodFullName)} (";
                                     var parameterStrs = new List<string>();
+                                    var parameterNames = new HashSet<string>(StringComparer.Ordinal);
                                     if ((methodDef.flags & METHOD_ATTRIBUTE_STATIC) == 0)
                                     {
                                         string thisType;
@@ -217,6 +225,10 @@ namespace Il2CppDumper
                                             thisType = ParseType(il2Cpp.types[typeDef.byvalTypeIndex]);
                                             methodTypeSignature.Add(il2Cpp.types[typeDef.byvalTypeIndex].type);
                                         }
+                                        if (typeDef.IsValueType)
+                                        {
+                                            thisType += "*";
+                                        }
                                         parameterStrs.Add($"{thisType} __this");
                                     }
                                     else if (il2Cpp.Version <= 24)
@@ -235,7 +247,7 @@ namespace Il2CppDumper
                                             parameterCType += "*";
                                         }
                                         methodTypeSignature.Add(parameterType.byref == 1 ? Il2CppTypeEnum.IL2CPP_TYPE_PTR : parameterType.type);
-                                        parameterStrs.Add($"{parameterCType} {FixName(parameterName)}");
+                                        parameterStrs.Add($"{parameterCType} {ParameterName(parameterName, j, parameterNames)}");
                                     }
                                     methodTypeSignature.Add(Il2CppTypeEnum.IL2CPP_TYPE_PTR);
                                     parameterStrs.Add($"const {methodInfoName}* method");
@@ -626,6 +638,28 @@ namespace Il2CppDumper
                     scriptMetadataMethod.MethodAddress = il2Cpp.GetRVA(genericMethodPointer);
                 }
             }
+        }
+
+        // overloads share a name, the second one on becomes Name_1, Name_2, ...
+        private static string UniqueMethodName(string name, HashSet<string> used)
+        {
+            var unique = name;
+            for (var n = 1; !used.Add(unique); n++)
+            {
+                unique = $"{name}_{n}";
+            }
+            return unique;
+        }
+
+        // unnamed or repeated parameters (and "method", which the trailing MethodInfo takes) break signature parsers
+        private static string ParameterName(string name, int index, HashSet<string> used)
+        {
+            var fixName = string.IsNullOrEmpty(name) ? $"param_{index}" : FixName(name);
+            while (fixName == "method" || fixName == "__this" || !used.Add(fixName))
+            {
+                fixName = $"{fixName}_{index}";
+            }
+            return fixName;
         }
 
         private static string FixName(string str)
