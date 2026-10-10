@@ -263,7 +263,7 @@ namespace Il2CppDumper
             {
                 Console.WriteLine("Generate struct...");
                 var scriptGenerator = new StructGenerator(executor);
-                scriptGenerator.WriteScript(outputDir);
+                scriptGenerator.WriteScript(config, outputDir);
                 Console.WriteLine("Done!");
             }
             if (config.GenerateDummyDll)

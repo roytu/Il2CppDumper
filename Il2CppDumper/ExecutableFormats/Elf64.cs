@@ -127,6 +127,23 @@ namespace Il2CppDumper
             return false;
         }
 
+        public override ulong FindExportedSymbol(string name)
+        {
+            if (symbolTable == null)
+            {
+                return 0;
+            }
+            var dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
+            foreach (var symbol in symbolTable)
+            {
+                if (symbol.st_shndx != 0 && ReadStringToNull(dynstrOffset + symbol.st_name) == name)
+                {
+                    return symbol.st_value;
+                }
+            }
+            return 0;
+        }
+
         private void ReadSymbol()
         {
             try

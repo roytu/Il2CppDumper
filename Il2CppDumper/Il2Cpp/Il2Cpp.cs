@@ -368,5 +368,11 @@ namespace Il2CppDumper
         {
             return pointer;
         }
+
+        // address of a dynamic symbol defined in this binary, 0 when there is none
+        public virtual ulong FindExportedSymbol(string name)
+        {
+            return 0;
+        }
     }
 }

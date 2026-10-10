@@ -39,7 +39,7 @@ namespace Il2CppDumper
             il2Cpp = il2CppExecutor.il2Cpp;
         }
 
-        public void WriteScript(string outputDir)
+        public void WriteScript(Config config, string outputDir)
         {
             var json = new ScriptJson();
             // 生成唯一名称
@@ -425,10 +425,12 @@ namespace Il2CppDumper
                 case 29:
                 case 29.1:
                 case 31:
+                    sb.Append(UseIl2CppClassLayout2022(config) ? HeaderConstants.HeaderV29_2022 : HeaderConstants.HeaderV29);
+                    break;
                 case 35:
                 case 38:
                 case 39:
-                    sb.Append(HeaderConstants.HeaderV29);
+                    sb.Append(HeaderConstants.HeaderV29_2022);
                     break;
                 case 106:
                 case 107:
@@ -447,6 +449,71 @@ namespace Il2CppDumper
             sb.Append(arrayClassHeader);
             sb.Append(methodInfoHeader);
             File.WriteAllText(outputDir + "il2cpp.h", sb.ToString());
+        }
+
+        // Unity 2022.2 added stack_slot_size to Il2CppClass without a metadata version change, moving flags from
+        // 276 to 280 (156 to 160 on 32-bit); the exported il2cpp_class_get_flags loads it in its first instruction.
+        private bool UseIl2CppClassLayout2022(Config config)
+        {
+            if (config.ForceIl2CppClassLayout)
+            {
+                return config.Il2CppClassLayout2022;
+            }
+            var (before, after) = il2Cpp.Is32Bit ? (156, 160) : (276, 280);
+            var symbol = il2Cpp.FindExportedSymbol("il2cpp_class_get_flags");
+            var offset = -1;
+            if (symbol != 0)
+            {
+                try
+                {
+                    il2Cpp.Position = il2Cpp.MapVATR(symbol & ~1ul); // bit 0 marks a Thumb export
+                    offset = DecodeFieldLoadOffset(il2Cpp.ReadBytes(16), (symbol & 1) != 0);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+            if (offset == before || offset == after)
+            {
+                return offset == after;
+            }
+            var reason = symbol == 0 ? "il2cpp_class_get_flags is not exported" : $"il2cpp_class_get_flags loads offset {offset}";
+            Console.WriteLine($"WARNING: Cannot detect the Il2CppClass layout ({reason}), assuming Unity {(config.Il2CppClassLayout2022 ? "2022.2 or later" : "2022.1 or earlier")}; set ForceIl2CppClassLayout and Il2CppClassLayout2022 in config.json to choose");
+            return config.Il2CppClassLayout2022;
+        }
+
+        // the displacement of the first field load in a getter, -1 when the code is not recognized
+        private static int DecodeFieldLoadOffset(byte[] code, bool thumb)
+        {
+            var word = BitConverter.ToUInt32(code, 0);
+            if ((word & 0xFFC00000) == 0xB9400000) // arm64: LDR Wt, [Xn, #imm12*4]
+            {
+                return (int)((word >> 10) & 0xFFF) * 4;
+            }
+            if ((word & 0xFFF00000) == 0xE5900000) // arm: LDR Rt, [Rn, #imm12]
+            {
+                return (int)(word & 0xFFF);
+            }
+            if (thumb && (word & 0xFFF0) == 0xF8D0) // Thumb-2: LDR.W Rt, [Rn, #imm12]
+            {
+                return (int)((word >> 16) & 0xFFF);
+            }
+            var i = code[0] == 0xF3 && code[1] == 0x0F && code[2] == 0x1E ? 4 : 0; // endbr32/endbr64
+            if (code[i] == 0x8B && (code[i + 1] & 0xC7) == 0x44 && code[i + 2] == 0x24 && code[i + 3] == 4) // mov r32, [esp+4]
+            {
+                i += 4;
+            }
+            if (code[i] == 0x8B && (code[i + 1] & 7) != 4) // mov r32, [r+disp]
+            {
+                switch (code[i + 1] & 0xC0)
+                {
+                    case 0x40:
+                        return (sbyte)code[i + 2];
+                    case 0x80:
+                        return BitConverter.ToInt32(code, i + 2);
+                }
+            }
+            return -1;
         }
 
         private void AddMetadataUsageTypeInfo(ScriptJson json, uint index, ulong address)

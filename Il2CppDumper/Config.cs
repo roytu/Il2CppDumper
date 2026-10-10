@@ -16,6 +16,8 @@
         public bool ForceIl2CppVersion { get; set; } = false;
         public double ForceVersion { get; set; } = 24.3;
         public bool ForceDump { get; set; } = false;
+        public bool ForceIl2CppClassLayout { get; set; } = false;
+        public bool Il2CppClassLayout2022 { get; set; } = true;
         public bool NoRedirectedPointer { get; set; } = false;
     }
 }
