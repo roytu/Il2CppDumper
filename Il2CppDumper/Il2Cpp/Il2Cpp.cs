@@ -240,8 +240,32 @@ namespace Il2CppDumper
             {
                 methodPointers = MapVATR<ulong>(pCodeRegistration.methodPointers, pCodeRegistration.methodPointersCount);
             }
+            if (Version >= 108)
+            {
+                return; // generic method tables and rgctxs come from the metadata, see InitFromMetadata
+            }
             genericMethodTable = MapVATR<Il2CppGenericMethodFunctionsDefinitions>(pMetadataRegistration.genericMethodTable, pMetadataRegistration.genericMethodTableCount);
             methodSpecs = MapVATR<Il2CppMethodSpec>(pMetadataRegistration.methodSpecs, pMetadataRegistration.methodSpecsCount);
+            BuildGenericMethodMaps();
+        }
+
+        // Version 108+: generic method tables and rgctxs come from the metadata, call after Init
+        public void InitFromMetadata(Metadata metadata)
+        {
+            if (Version < 108)
+            {
+                return;
+            }
+            (methodSpecs, genericMethodTable) = metadata.ReadGenericTables((long)pCodeRegistration.genericMethodPointersCount, (long)pCodeRegistration.invokerPointersCount);
+            BuildGenericMethodMaps();
+            foreach (var imageDef in metadata.imageDefs)
+            {
+                rgctxsDictionary[metadata.GetStringFromIndex(imageDef.nameIndex)] = metadata.GetImageRGCTXs(imageDef);
+            }
+        }
+
+        private void BuildGenericMethodMaps()
+        {
             foreach (var table in genericMethodTable)
             {
                 var methodSpec = methodSpecs[table.genericMethodIndex];

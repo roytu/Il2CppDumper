@@ -287,7 +287,7 @@ namespace Il2CppDumper
                                     var va = il2Cpp.MapRTVA(addr);
                                     if (va > 0)
                                     {
-                                        switch ((Il2CppMetadataUsage)usage)
+                                        switch (metadata.DecodeUsage(encodedToken))
                                         {
                                             case Il2CppMetadataUsage.kIl2CppMetadataUsageInvalid:
                                                 break;
@@ -433,6 +433,11 @@ namespace Il2CppDumper
                 case 106:
                 case 107:
                     sb.Append(HeaderConstants.HeaderV106);
+                    break;
+                case 108:
+                case 110:
+                case 111:
+                    sb.Append(HeaderConstants.HeaderV108);
                     break;
                 default:
                     Console.WriteLine($"WARNING: This il2cpp version [{il2Cpp.Version}] does not support generating .h files");
@@ -792,10 +797,10 @@ namespace Il2CppDumper
             {
                 var vTableIndex = typeDef.vtableStart + i;
                 var encodedMethodIndex = metadata.vtableMethods[vTableIndex];
-                var usage = Metadata.GetEncodedIndexType(encodedMethodIndex);
+                var usage = metadata.DecodeUsage(encodedMethodIndex);
                 var index = metadata.GetDecodedMethodIndex(encodedMethodIndex);
                 Il2CppMethodDefinition methodDef;
-                if (usage == 6) //kIl2CppMetadataUsageMethodRef
+                if (usage == Il2CppMetadataUsage.kIl2CppMetadataUsageMethodRef)
                 {
                     var methodSpec = il2Cpp.methodSpecs[index];
                     methodDef = metadata.methodDefs[methodSpec.methodDefinitionIndex];
@@ -834,7 +839,7 @@ namespace Il2CppDumper
                     structInfo.RGCTXs.Add(structRGCTXInfo);
                     structRGCTXInfo.Type = definitionData.type;
                     Il2CppRGCTXDefinitionData rgctxDefData;
-                    if (il2Cpp.Version >= 27.2)
+                    if (definitionData.data == null)
                     {
                         rgctxDefData = il2Cpp.MapVATR<Il2CppRGCTXDefinitionData>(definitionData._data);
                     }
@@ -880,7 +885,7 @@ namespace Il2CppDumper
                     rgctxs.Add(structRGCTXInfo);
                     structRGCTXInfo.Type = definitionData.type;
                     Il2CppRGCTXDefinitionData rgctxDefData;
-                    if (il2Cpp.Version >= 27.2)
+                    if (definitionData.data == null)
                     {
                         rgctxDefData = il2Cpp.MapVATR<Il2CppRGCTXDefinitionData>(definitionData._data);
                     }
@@ -1049,6 +1054,10 @@ namespace Il2CppDumper
                             break;
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             sb.Append($"\tMethodInfo* _{i}_{rgctx.MethodName};\n");
+                            break;
+                        case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_FIELD_OFFSET_TYPE:
+                        case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_FIELD_OFFSET_FIELD:
+                            sb.Append($"\tsize_t _{i}_FieldOffset;\n");
                             break;
                         default:
                             sb.Append($"\tvoid* _{i}_{rgctx.Type.ToString().Replace("IL2CPP_RGCTX_DATA_", "")};\n");
@@ -1367,6 +1376,10 @@ namespace Il2CppDumper
                             break;
                         case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_METHOD:
                             methodInfoHeader.Append($"\tMethodInfo* _{i}_{rgctx.MethodName};\n");
+                            break;
+                        case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_FIELD_OFFSET_TYPE:
+                        case Il2CppRGCTXDataType.IL2CPP_RGCTX_DATA_FIELD_OFFSET_FIELD:
+                            methodInfoHeader.Append($"\tsize_t _{i}_FieldOffset;\n");
                             break;
                         default:
                             methodInfoHeader.Append($"\tvoid* _{i}_{rgctx.Type.ToString().Replace("IL2CPP_RGCTX_DATA_", "")};\n");
