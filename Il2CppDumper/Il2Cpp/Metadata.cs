@@ -61,7 +61,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 110 || (version > 39 && version < 106) || version == 109)
+            if (version < 16 || version > 111 || (version > 39 && version < 106) || version == 109)
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -224,6 +224,10 @@ namespace Il2CppDumper
                 generatedMethodsStart = methodDefs.Length - generatedMethodTokens.Length;
                 SynthesizeTokens();
             }
+            if (Version >= 111)
+            {
+                ReadMethodSigs();
+            }
         }
 
         // Keep in sync with SerializedIndexSizes in vm/GlobalMetadata.cpp
@@ -311,6 +315,22 @@ namespace Il2CppDumper
                 };
             }
             return result;
+        }
+
+        // Version 111+: per method, returnType (TypeIndex) + compressed paramCount + paramCount TypeIndex
+        private void ReadMethodSigs()
+        {
+            foreach (var methodDef in methodDefs)
+            {
+                Position = header.methodSigs.offset + (ulong)methodDef.methodSigOffset;
+                methodDef.returnType = ReadIndex(IndexKind.Type);
+                var parameterCount = ReadCompressedUInt32();
+                methodDef.parameterCount = (ushort)parameterCount;
+                for (var j = 0; j < parameterCount; j++)
+                {
+                    parameterDefs[methodDef.parameterStart + j].typeIndex = ReadIndex(IndexKind.Type);
+                }
+            }
         }
 
         // Version 110+: tokens are no longer stored, rebuild them the same way vm/GlobalMetadata.cpp does

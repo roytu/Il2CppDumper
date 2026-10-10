@@ -177,6 +177,8 @@ namespace Il2CppDumper
         public Il2CppSectionMetadata events; // Il2CppEventDefinition
         [Version(Min = 38)]
         public Il2CppSectionMetadata properties; // Il2CppPropertyDefinition
+        [Version(Min = 111)]
+        public Il2CppSectionMetadata methodSigs; // method type signatures blob (returnTypeIndex + compressedParamCount + paramTypeIndex[])
         [Version(Min = 38)]
         public Il2CppSectionMetadata methods; // Il2CppMethodDefinition
         [Version(Min = 38)]
@@ -451,9 +453,11 @@ namespace Il2CppDumper
         public uint nameIndex;
         [Index(IndexKind.TypeDefinition)]
         public int declaringType;
+        // Version 111+: signature fields come from the methodSigs blob, see Metadata.ReadMethodSigs
+        [Version(Max = 110)]
         [Index(IndexKind.Type)]
         public int returnType;
-        [Version(Min = 31)]
+        [Version(Min = 31, Max = 110)]
         public int returnParameterToken;
         [Index(IndexKind.Parameter)]
         public int parameterStart;
@@ -476,15 +480,20 @@ namespace Il2CppDumper
         public ushort flags;
         public ushort iflags;
         public ushort slot;
+        [Version(Max = 110)]
         public ushort parameterCount;
+        [Version(Min = 111)]
+        public int methodSigOffset;
     }
 
     public class Il2CppParameterDefinition
     {
         public uint nameIndex;
+        [Version(Max = 110)]
         public uint token;
         [Version(Max = 24)]
         public int customAttributeIndex;
+        [Version(Max = 110)]
         [Index(IndexKind.Type)]
         public int typeIndex;
     }
