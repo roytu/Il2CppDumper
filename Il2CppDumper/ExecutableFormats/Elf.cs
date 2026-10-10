@@ -15,6 +15,8 @@ namespace Il2CppDumper
         private Elf32_Shdr[] sectionTable;
         private Elf32_Phdr pt_dynamic;
 
+        public bool IsX86 => elfHeader.e_machine == EM_386;
+
         /*
         * LDR R1, [X]
         * ADD R0, X, X

@@ -424,6 +424,8 @@ namespace Il2CppDumper
 
         public bool IsValueType => (bitfield & 0x1) == 1;
         public bool IsEnum => ((bitfield >> 1) & 0x1) == 1;
+        // bits 7-10 hold the StructLayout packing il2cpp lays the fields out with, as 0, 1, 2, 4 ... 128
+        public int PackingSize => (bitfield >> 6 & 0xF) == 0 ? 0 : 1 << (int)((bitfield >> 6 & 0xF) - 1);
         public bool HasGeneratedMethods => ((bitfield >> 19) & 0x1) == 1;
 
         public int GetEnumElementTypeIndex(double version)
