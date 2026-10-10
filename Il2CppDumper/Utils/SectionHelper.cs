@@ -310,7 +310,9 @@ namespace Il2CppDumper
                                     }
                                     if (flag)
                                     {
-                                        return addr - il2Cpp.PointerSize * 10 - section.offset + section.address;
+                                        // Version 108+ dropped genericMethodTable and methodSpecs from Il2CppMetadataRegistration
+                                        var fieldOffsetsCountSlot = il2Cpp.Version >= 108 ? 6ul : 10ul;
+                                        return addr - il2Cpp.PointerSize * fieldOffsetsCountSlot - section.offset + section.address;
                                     }
                                 }
                             }

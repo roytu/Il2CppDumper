@@ -193,7 +193,7 @@ namespace Il2CppDumper
             {
                 return (int)raw;
             }
-            var usage = (Il2CppMetadataUsage)Metadata.GetEncodedIndexType(raw);
+            var usage = metadata.DecodeUsage(raw);
             var index = (int)metadata.GetDecodedMethodIndex(raw);
             switch (usage)
             {
