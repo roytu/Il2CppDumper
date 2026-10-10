@@ -222,9 +222,9 @@ namespace Il2CppDumper
                         }
                     }
                     //method
-                    var methodEnd = typeDef.methodStart + typeDef.method_count;
-                    for (var i = typeDef.methodStart; i < methodEnd; ++i)
+                    for (var localMethodIndex = 0; localMethodIndex < typeDef.method_count; ++localMethodIndex)
                     {
+                        var i = metadata.GetTypeMethodIndex(typeDef, index, localMethodIndex);
                         var methodDef = metadata.methodDefs[i];
                         var methodName = metadata.GetStringFromIndex(methodDef.nameIndex);
                         var methodDefinition = new MethodDefinition(methodName, (MethodAttributes)methodDef.flags, typeDefinition.Module.ImportReference(typeSystem.Void))
@@ -338,12 +338,12 @@ namespace Il2CppDumper
                         MethodDefinition SetMethod = null;
                         if (propertyDef.get >= 0)
                         {
-                            GetMethod = methodDefinitionDic[typeDef.methodStart + propertyDef.get];
+                            GetMethod = methodDefinitionDic[metadata.GetTypeMethodIndex(typeDef, index, propertyDef.get)];
                             propertyType = GetMethod.ReturnType;
                         }
                         if (propertyDef.set >= 0)
                         {
-                            SetMethod = methodDefinitionDic[typeDef.methodStart + propertyDef.set];
+                            SetMethod = methodDefinitionDic[metadata.GetTypeMethodIndex(typeDef, index, propertyDef.set)];
                             propertyType ??= SetMethod.Parameters[0].ParameterType;
                         }
                         var propertyDefinition = new PropertyDefinition(propertyName, (PropertyAttributes)propertyDef.attrs, propertyType)
@@ -371,11 +371,11 @@ namespace Il2CppDumper
                         var eventTypeRef = GetTypeReference(typeDefinition, eventType);
                         var eventDefinition = new EventDefinition(eventName, (EventAttributes)eventType.attrs, eventTypeRef);
                         if (eventDef.add >= 0)
-                            eventDefinition.AddMethod = methodDefinitionDic[typeDef.methodStart + eventDef.add];
+                            eventDefinition.AddMethod = methodDefinitionDic[metadata.GetTypeMethodIndex(typeDef, index, eventDef.add)];
                         if (eventDef.remove >= 0)
-                            eventDefinition.RemoveMethod = methodDefinitionDic[typeDef.methodStart + eventDef.remove];
+                            eventDefinition.RemoveMethod = methodDefinitionDic[metadata.GetTypeMethodIndex(typeDef, index, eventDef.remove)];
                         if (eventDef.raise >= 0)
-                            eventDefinition.InvokeMethod = methodDefinitionDic[typeDef.methodStart + eventDef.raise];
+                            eventDefinition.InvokeMethod = methodDefinitionDic[metadata.GetTypeMethodIndex(typeDef, index, eventDef.raise)];
                         typeDefinition.Events.Add(eventDefinition);
                         eventDefinitionDic.Add(i, eventDefinition);
 
