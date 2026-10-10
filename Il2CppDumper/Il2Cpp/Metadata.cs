@@ -42,6 +42,10 @@ namespace Il2CppDumper
         // Version 108+
         public Il2CppTokenRangePair[] rgctxRanges;
         public Il2CppRGCTXDefinition[] rgctxValues;
+        // Version 110+
+        public uint[] generatedMethodTokens;
+        private readonly Dictionary<int, Il2CppGeneratedMethodTypeInfo> generatedMethodTypeInfoDic = new();
+        private int generatedMethodsStart;
 
         private readonly Dictionary<uint, string> stringCache = new();
 
@@ -57,7 +61,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 108 || (version > 39 && version < 106))
+            if (version < 16 || version > 110 || (version > 39 && version < 106) || version == 109)
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -209,6 +213,17 @@ namespace Il2CppDumper
                 rgctxRanges = ReadMetadataClassArray<Il2CppTokenRangePair>(header.rgctxRanges.offset, (int)header.rgctxRanges.size);
                 rgctxValues = ReadRGCTXValues();
             }
+            if (Version >= 110)
+            {
+                var generatedMethodTypeInfos = ReadClassArray<Il2CppGeneratedMethodTypeInfo>(header.generatedMethodTypeInfos.offset, header.generatedMethodTypeInfos.count);
+                generatedMethodTokens = ReadClassArray<uint>(header.generatedMethodTokens.offset, header.generatedMethodTokens.size / 4);
+                foreach (var info in generatedMethodTypeInfos)
+                {
+                    generatedMethodTypeInfoDic[info.typeIndex] = info;
+                }
+                generatedMethodsStart = methodDefs.Length - generatedMethodTokens.Length;
+                SynthesizeTokens();
+            }
         }
 
         // Keep in sync with SerializedIndexSizes in vm/GlobalMetadata.cpp
@@ -225,7 +240,7 @@ namespace Il2CppDumper
             }
             else if (header.fields.count > 0)
             {
-                IndexSizes[(int)IndexKind.Type] = (int)(header.fields.size / header.fields.count) - 8;
+                IndexSizes[(int)IndexKind.Type] = (int)(header.fields.size / header.fields.count) - (Version >= 110 ? 4 : 8);
             }
             IndexSizes[(int)IndexKind.TypeDefinition] = GetIndexSize((int)header.typeDefinitions.count);
             IndexSizes[(int)IndexKind.GenericContainer] = GetIndexSize((int)header.genericContainers.count);
@@ -296,6 +311,70 @@ namespace Il2CppDumper
                 };
             }
             return result;
+        }
+
+        // Version 110+: tokens are no longer stored, rebuild them the same way vm/GlobalMetadata.cpp does
+        private void SynthesizeTokens()
+        {
+            const uint TypeDef = 0x02000000;
+            const uint FieldDef = 0x04000000;
+            const uint MethodDef = 0x06000000;
+            const uint Event = 0x14000000;
+            const uint Property = 0x17000000;
+
+            foreach (var imageDef in imageDefs)
+            {
+                var typeEnd = imageDef.typeStart + imageDef.typeCount;
+                for (var typeIndex = imageDef.typeStart; typeIndex < typeEnd; typeIndex++)
+                {
+                    var typeDef = typeDefs[typeIndex];
+                    typeDef.token = TypeDef | (uint)(typeIndex - imageDef.typeStart + 1);
+                    for (var i = 0; i < typeDef.field_count; i++)
+                    {
+                        var fieldIndex = typeDef.fieldStart + i;
+                        fieldDefs[fieldIndex].token = FieldDef | (uint)(fieldIndex - imageDef.fieldStart + 1);
+                    }
+                    for (var i = 0; i < typeDef.property_count; i++)
+                    {
+                        var propertyIndex = typeDef.propertyStart + i;
+                        propertyDefs[propertyIndex].token = Property | (uint)(propertyIndex - imageDef.propertyStart + 1);
+                    }
+                    for (var i = 0; i < typeDef.event_count; i++)
+                    {
+                        var eventIndex = typeDef.eventStart + i;
+                        eventDefs[eventIndex].token = Event | (uint)(eventIndex - imageDef.eventStart + 1);
+                    }
+                    generatedMethodTypeInfoDic.TryGetValue(typeIndex, out var generatedInfo);
+                    for (var i = 0; i < typeDef.method_count; i++)
+                    {
+                        var methodIndex = GetTypeMethodIndex(typeDef, typeIndex, i);
+                        var methodDef = methodDefs[methodIndex];
+                        if (typeDef.HasGeneratedMethods && generatedInfo != null && methodIndex >= generatedInfo.generatedMethodStart)
+                        {
+                            methodDef.token = generatedMethodTokens[methodIndex - generatedMethodsStart];
+                        }
+                        else
+                        {
+                            methodDef.token = MethodDef | (uint)(methodIndex - imageDef.methodStart + 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Version 110+: a type with generated methods has them in a second range at generatedMethodStart
+        public int GetTypeMethodIndex(Il2CppTypeDefinition typeDef, int typeDefIndex, int localIndex)
+        {
+            if (Version < 110 || !typeDef.HasGeneratedMethods || !generatedMethodTypeInfoDic.TryGetValue(typeDefIndex, out var info))
+            {
+                return typeDef.methodStart + localIndex;
+            }
+            var nonGeneratedMethodCount = typeDef.method_count - (int)info.generatedMethodCount;
+            if (localIndex < nonGeneratedMethodCount)
+            {
+                return typeDef.methodStart + localIndex;
+            }
+            return info.generatedMethodStart + (localIndex - nonGeneratedMethodCount);
         }
 
         // Version 108+: the three method spec tables form one GenericMethodIndex space in this order

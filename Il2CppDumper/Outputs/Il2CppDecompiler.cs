@@ -213,14 +213,14 @@ namespace Il2CppDumper
                                 writer.Write("\t");
                                 if (propertyDef.get >= 0)
                                 {
-                                    var methodDef = metadata.methodDefs[typeDef.methodStart + propertyDef.get];
+                                    var methodDef = metadata.methodDefs[metadata.GetTypeMethodIndex(typeDef, typeDefIndex, propertyDef.get)];
                                     writer.Write(GetModifiers(methodDef));
                                     var propertyType = il2Cpp.types[methodDef.returnType];
                                     writer.Write($"{executor.GetTypeName(propertyType, false, false)} {metadata.GetStringFromIndex(propertyDef.nameIndex)} {{ ");
                                 }
                                 else if (propertyDef.set >= 0)
                                 {
-                                    var methodDef = metadata.methodDefs[typeDef.methodStart + propertyDef.set];
+                                    var methodDef = metadata.methodDefs[metadata.GetTypeMethodIndex(typeDef, typeDefIndex, propertyDef.set)];
                                     writer.Write(GetModifiers(methodDef));
                                     var parameterDef = metadata.parameterDefs[methodDef.parameterStart];
                                     var propertyType = il2Cpp.types[parameterDef.typeIndex];
@@ -238,9 +238,9 @@ namespace Il2CppDumper
                         if (config.DumpMethod && typeDef.method_count > 0)
                         {
                             writer.Write("\n\t// Methods\n");
-                            var methodEnd = typeDef.methodStart + typeDef.method_count;
-                            for (var i = typeDef.methodStart; i < methodEnd; ++i)
+                            for (var localMethodIndex = 0; localMethodIndex < typeDef.method_count; ++localMethodIndex)
                             {
+                                var i = metadata.GetTypeMethodIndex(typeDef, typeDefIndex, localMethodIndex);
                                 writer.Write("\n");
                                 var methodDef = metadata.methodDefs[i];
                                 var isAbstract = (methodDef.flags & METHOD_ATTRIBUTE_ABSTRACT) != 0;
