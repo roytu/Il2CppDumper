@@ -249,6 +249,10 @@ namespace Il2CppDumper
         public Il2CppSectionMetadata rgctxValues; // uint8 type + uint32 data, stride 5
         [Version(Min = 108)]
         public Il2CppSectionMetadata staticConstructorTypeIndices; // TypeDefinitionIndex per eager-init type, per image in image order
+        [Version(Min = 110)]
+        public Il2CppSectionMetadata generatedMethodTypeInfos; // Il2CppGeneratedMethodTypeInfo, sorted by typeIndex
+        [Version(Min = 110)]
+        public Il2CppSectionMetadata generatedMethodTokens; // uint32 per generated method, in global method-table order
     }
 
     public class Il2CppAssemblyDefinition
@@ -321,6 +325,17 @@ namespace Il2CppDumper
         public int staticConstructorStart;
         [Version(Min = 108)]
         public uint staticConstructorCount;
+
+        // Version 110+: per-image starts used to rebuild tokens, only methodStart is index-width
+        [Version(Min = 110)]
+        public int fieldStart;
+        [Version(Min = 110)]
+        public int propertyStart;
+        [Version(Min = 110)]
+        public int eventStart;
+        [Version(Min = 110)]
+        [Index(IndexKind.Method)]
+        public int methodStart;
     }
 
     public class Il2CppTypeDefinition
@@ -398,12 +413,16 @@ namespace Il2CppDumper
         // 13-16 - One of nine possible PackingSize values (0, 1, 2, 4, 8, 16, 32, 64, or 128) - the specified packing size (even for explicit layouts)
         // 17 - IsByRefLike (e.g. ref struct) (v106+)
         // 18 - HasInlineArray (v106+)
+        // 19 - HasIDynamicInterfaceCastable (v110+)
+        // 20 - HasGeneratedMethods (type has IL2CPP-injected methods) (v110+)
         public uint bitfield;
-        [Version(Min = 19)]
+        // Version 110+: tokens are rebuilt by Metadata.SynthesizeTokens
+        [Version(Min = 19, Max = 108)]
         public uint token;
 
         public bool IsValueType => (bitfield & 0x1) == 1;
         public bool IsEnum => ((bitfield >> 1) & 0x1) == 1;
+        public bool HasGeneratedMethods => ((bitfield >> 19) & 0x1) == 1;
 
         public int GetEnumElementTypeIndex(double version)
         {
@@ -452,6 +471,7 @@ namespace Il2CppDumper
         public int rgctxStartIndex;
         [Version(Max = 24.1)]
         public int rgctxCount;
+        [Version(Max = 108)]
         public uint token;
         public ushort flags;
         public ushort iflags;
@@ -476,7 +496,7 @@ namespace Il2CppDumper
         public int typeIndex;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        [Version(Min = 19)]
+        [Version(Min = 19, Max = 108)]
         public uint token;
     }
 
@@ -500,7 +520,7 @@ namespace Il2CppDumper
         public uint attrs;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        [Version(Min = 19)]
+        [Version(Min = 19, Max = 108)]
         public uint token;
     }
 
@@ -562,7 +582,7 @@ namespace Il2CppDumper
         public int raise;
         [Version(Max = 24)]
         public int customAttributeIndex;
-        [Version(Min = 19)]
+        [Version(Min = 19, Max = 108)]
         public uint token;
     }
 
@@ -657,6 +677,14 @@ namespace Il2CppDumper
         public int invokerIndex;
         [Index(IndexKind.AdjustorThunk)]
         public int adjustorThunkIndex;
+    }
+
+    // Version 110+: the runtime bsearches this as a raw struct, so no index-width packing here
+    public class Il2CppGeneratedMethodTypeInfo
+    {
+        public int typeIndex;
+        public int generatedMethodStart;
+        public uint generatedMethodCount;
     }
 
     public enum Il2CppRGCTXDataType
