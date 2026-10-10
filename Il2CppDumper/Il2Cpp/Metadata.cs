@@ -39,6 +39,9 @@ namespace Il2CppDumper
         public Il2CppConstraintIndex[] constraintIndices;
         public uint[] vtableMethods;
         public Il2CppRGCTXDefinition[] rgctxEntries;
+        // Version 108+
+        public Il2CppTokenRangePair[] rgctxRanges;
+        public Il2CppRGCTXDefinition[] rgctxValues;
 
         private readonly Dictionary<uint, string> stringCache = new();
 
@@ -54,7 +57,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 107 || (version > 39 && version < 106))
+            if (version < 16 || version > 108 || (version > 39 && version < 106))
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -201,6 +204,11 @@ namespace Il2CppDumper
             {
                 rgctxEntries = ReadMetadataClassArray<Il2CppRGCTXDefinition>(header.rgctxEntriesOffset, header.rgctxEntriesCount);
             }
+            if (Version >= 108)
+            {
+                rgctxRanges = ReadMetadataClassArray<Il2CppTokenRangePair>(header.rgctxRanges.offset, (int)header.rgctxRanges.size);
+                rgctxValues = ReadRGCTXValues();
+            }
         }
 
         // Keep in sync with SerializedIndexSizes in vm/GlobalMetadata.cpp
@@ -236,6 +244,26 @@ namespace Il2CppDumper
                 IndexSizes[(int)IndexKind.DefaultValueData] = GetIndexSize((int)header.fieldAndParameterDefaultValueData.count);
                 IndexSizes[(int)IndexKind.Method] = GetIndexSize((int)header.methods.count);
             }
+            if (Version >= 108)
+            {
+                var genericMethodCount = header.methodSpecsOnGenericType.count + header.genericMethodSpecsOnType.count + header.methodSpecs.count;
+                IndexSizes[(int)IndexKind.GenericMethod] = GetIndexSize((int)genericMethodCount);
+                IndexSizes[(int)IndexKind.AdjustorThunk] = GetIndexSize((int)header.genericMethodFunctionsDefinitionsWithAdjustor.count);
+                // GenericInstIndex size comes from the binary's genericInstsCount, infer it from the method spec stride instead
+                var methodWidth = IndexSizes[(int)IndexKind.Method];
+                if (header.methodSpecs.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = ((int)(header.methodSpecs.size / header.methodSpecs.count) - methodWidth) / 2;
+                }
+                else if (header.genericMethodSpecsOnType.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = (int)(header.genericMethodSpecsOnType.size / header.genericMethodSpecsOnType.count) - methodWidth;
+                }
+                else if (header.methodSpecsOnGenericType.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = (int)(header.methodSpecsOnGenericType.size / header.methodSpecsOnGenericType.count) - methodWidth;
+                }
+            }
         }
 
         public static int GetIndexSize(int count)
@@ -248,6 +276,99 @@ namespace Il2CppDumper
         private T[] ReadMetadataClassArray<T>(uint addr, int count) where T : new()
         {
             return ReadClassArray<T>(addr, count / SizeOf(typeof(T)));
+        }
+
+        // Version 108+: uint8 type + uint32 data, stride 5
+        private Il2CppRGCTXDefinition[] ReadRGCTXValues()
+        {
+            var count = (int)header.rgctxValues.count;
+            var stride = count > 0 ? (int)(header.rgctxValues.size / header.rgctxValues.count) : 5;
+            var result = new Il2CppRGCTXDefinition[count];
+            for (var i = 0; i < count; i++)
+            {
+                Position = header.rgctxValues.offset + (ulong)(i * stride);
+                var type = ReadByte();
+                var data = ReadInt32();
+                result[i] = new Il2CppRGCTXDefinition
+                {
+                    type_post29 = type,
+                    data = new Il2CppRGCTXDefinitionData { rgctxDataDummy = data }
+                };
+            }
+            return result;
+        }
+
+        // Version 108+: the three method spec tables form one GenericMethodIndex space in this order
+        public (Il2CppMethodSpec[] methodSpecs, Il2CppGenericMethodFunctionsDefinitions[] genericMethodTable) ReadGenericTables(long genericMethodPointersCount, long invokerPointersCount)
+        {
+            IndexSizes[(int)IndexKind.MethodPointerTable] = GetIndexSize((int)genericMethodPointersCount);
+            IndexSizes[(int)IndexKind.InvokerTable] = GetIndexSize((int)invokerPointersCount);
+            var expectedStride = IndexSizes[(int)IndexKind.GenericMethod] + IndexSizes[(int)IndexKind.MethodPointerTable] + IndexSizes[(int)IndexKind.InvokerTable];
+            CheckStride(header.genericMethodFunctionsDefinitions, expectedStride, "genericMethodFunctionsDefinitions");
+            CheckStride(header.genericMethodFunctionsDefinitionsWithAdjustor, expectedStride + IndexSizes[(int)IndexKind.AdjustorThunk], "genericMethodFunctionsDefinitionsWithAdjustor");
+
+            var onGenericType = ReadMetadataClassArray<Il2CppMethodSpecOnGenericType>(header.methodSpecsOnGenericType.offset, (int)header.methodSpecsOnGenericType.size);
+            var genericOnType = ReadMetadataClassArray<Il2CppGenericMethodSpecOnType>(header.genericMethodSpecsOnType.offset, (int)header.genericMethodSpecsOnType.size);
+            var both = ReadMetadataClassArray<Il2CppMetadataMethodSpec>(header.methodSpecs.offset, (int)header.methodSpecs.size);
+            var methodSpecs = new Il2CppMethodSpec[onGenericType.Length + genericOnType.Length + both.Length];
+            var n = 0;
+            foreach (var spec in onGenericType)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = spec.classIndexIndex, methodIndexIndex = -1 };
+            }
+            foreach (var spec in genericOnType)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = -1, methodIndexIndex = spec.methodIndexIndex };
+            }
+            foreach (var spec in both)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = spec.classIndexIndex, methodIndexIndex = spec.methodIndexIndex };
+            }
+
+            var plain = ReadMetadataClassArray<Il2CppMetadataGenericMethodFunctions>(header.genericMethodFunctionsDefinitions.offset, (int)header.genericMethodFunctionsDefinitions.size);
+            var withAdjustor = ReadMetadataClassArray<Il2CppMetadataGenericMethodFunctionsWithAdjustor>(header.genericMethodFunctionsDefinitionsWithAdjustor.offset, (int)header.genericMethodFunctionsDefinitionsWithAdjustor.size);
+            var table = new Il2CppGenericMethodFunctionsDefinitions[plain.Length + withAdjustor.Length];
+            n = 0;
+            foreach (var entry in plain)
+            {
+                table[n++] = new Il2CppGenericMethodFunctionsDefinitions
+                {
+                    genericMethodIndex = entry.genericMethodIndex,
+                    indices = new Il2CppGenericMethodIndices { methodIndex = entry.methodIndex, invokerIndex = entry.invokerIndex, adjustorThunk = -1 }
+                };
+            }
+            foreach (var entry in withAdjustor)
+            {
+                table[n++] = new Il2CppGenericMethodFunctionsDefinitions
+                {
+                    genericMethodIndex = entry.genericMethodIndex,
+                    indices = new Il2CppGenericMethodIndices { methodIndex = entry.methodIndex, invokerIndex = entry.invokerIndex, adjustorThunk = entry.adjustorThunkIndex }
+                };
+            }
+
+            return (methodSpecs, table);
+        }
+
+        private static void CheckStride(Il2CppSectionMetadata section, int expectedStride, string name)
+        {
+            if (section.count > 0 && section.size / section.count != expectedStride)
+            {
+                throw new InvalidDataException($"ERROR: Unexpected {name} stride {section.size / section.count}, expected {expectedStride}.");
+            }
+        }
+
+        public Dictionary<uint, Il2CppRGCTXDefinition[]> GetImageRGCTXs(Il2CppImageDefinition imageDef)
+        {
+            var result = new Dictionary<uint, Il2CppRGCTXDefinition[]>();
+            var end = imageDef.rgctxRangesStart + imageDef.rgctxRangesCount;
+            for (var i = imageDef.rgctxRangesStart; i < end; i++)
+            {
+                var range = rgctxRanges[i];
+                var defs = new Il2CppRGCTXDefinition[range.range.length];
+                Array.Copy(rgctxValues, range.range.start, defs, 0, range.range.length);
+                result[range.token] = defs;
+            }
+            return result;
         }
 
         public bool GetFieldDefaultValueFromIndex(int index, out Il2CppFieldDefaultValue value)
@@ -342,6 +463,17 @@ namespace Il2CppDumper
         public static uint GetEncodedIndexType(uint index)
         {
             return (index & 0xE0000000) >> 29;
+        }
+
+        // Version 108 removed kIl2CppMetadataUsageIl2CppType, later kinds shift down by one
+        public Il2CppMetadataUsage DecodeUsage(uint encodedIndex)
+        {
+            var usage = GetEncodedIndexType(encodedIndex);
+            if (Version >= 108 && usage >= 2)
+            {
+                usage++;
+            }
+            return (Il2CppMetadataUsage)usage;
         }
 
         public uint GetDecodedMethodIndex(uint index)

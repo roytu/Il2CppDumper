@@ -21,6 +21,11 @@ namespace Il2CppDumper
         Field,
         DefaultValueData,
         Method,
+        GenericInst,
+        GenericMethod,
+        MethodPointerTable,
+        InvokerTable,
+        AdjustorThunk,
         Count
     }
 

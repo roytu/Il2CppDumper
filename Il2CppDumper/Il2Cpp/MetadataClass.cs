@@ -231,6 +231,24 @@ namespace Il2CppDumper
         public Il2CppSectionMetadata windowsRuntimeStrings; // const char*
         [Version(Min = 38)]
         public Il2CppSectionMetadata exportedTypeDefinitions; // TypeDefinitionIndex
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata methodSpecsOnGenericType; // Il2CppMethodSpecOnGenericType
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata genericMethodSpecsOnType; // Il2CppGenericMethodSpecOnType
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata methodSpecs; // Il2CppMethodSpec
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata genericMethodFunctionsDefinitions; // Il2CppGenericMethodFunctionsDefinitions
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata genericMethodFunctionsDefinitionsWithAdjustor; // Il2CppGenericMethodFunctionsDefinitionsWithAdjustor
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata invokerIndices; // InvokerTableIndex per method, per image, in image order
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata rgctxRanges; // Il2CppTokenRangePair (token + global start + length), per image in image order
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata rgctxValues; // uint8 type + uint32 data, stride 5
+        [Version(Min = 108)]
+        public Il2CppSectionMetadata staticConstructorTypeIndices; // TypeDefinitionIndex per eager-init type, per image in image order
     }
 
     public class Il2CppAssemblyDefinition
@@ -291,6 +309,18 @@ namespace Il2CppDumper
         public int customAttributeStart;
         [Version(Min = 24.1)]
         public uint customAttributeCount;
+
+        [Version(Min = 108)]
+        public uint invokerIndicesStart;
+        [Version(Min = 108)]
+        public uint rgctxRangesStart;
+        [Version(Min = 108)]
+        public uint rgctxRangesCount;
+        [Version(Min = 108)]
+        [Index(IndexKind.TypeDefinition)]
+        public int staticConstructorStart;
+        [Version(Min = 108)]
+        public uint staticConstructorCount;
     }
 
     public class Il2CppTypeDefinition
@@ -580,6 +610,55 @@ namespace Il2CppDumper
         public int index;
     }
 
+    // Version 108+: method specs, see Metadata.ReadGenericTables
+    public class Il2CppMethodSpecOnGenericType
+    {
+        [Index(IndexKind.Method)]
+        public int methodDefinitionIndex;
+        [Index(IndexKind.GenericInst)]
+        public int classIndexIndex;
+    }
+
+    public class Il2CppGenericMethodSpecOnType
+    {
+        [Index(IndexKind.Method)]
+        public int methodDefinitionIndex;
+        [Index(IndexKind.GenericInst)]
+        public int methodIndexIndex;
+    }
+
+    public class Il2CppMetadataMethodSpec
+    {
+        [Index(IndexKind.Method)]
+        public int methodDefinitionIndex;
+        [Index(IndexKind.GenericInst)]
+        public int classIndexIndex;
+        [Index(IndexKind.GenericInst)]
+        public int methodIndexIndex;
+    }
+
+    public class Il2CppMetadataGenericMethodFunctions
+    {
+        [Index(IndexKind.GenericMethod)]
+        public int genericMethodIndex;
+        [Index(IndexKind.MethodPointerTable)]
+        public int methodIndex;
+        [Index(IndexKind.InvokerTable)]
+        public int invokerIndex;
+    }
+
+    public class Il2CppMetadataGenericMethodFunctionsWithAdjustor
+    {
+        [Index(IndexKind.GenericMethod)]
+        public int genericMethodIndex;
+        [Index(IndexKind.MethodPointerTable)]
+        public int methodIndex;
+        [Index(IndexKind.InvokerTable)]
+        public int invokerIndex;
+        [Index(IndexKind.AdjustorThunk)]
+        public int adjustorThunkIndex;
+    }
+
     public enum Il2CppRGCTXDataType
     {
         IL2CPP_RGCTX_DATA_INVALID,
@@ -588,6 +667,9 @@ namespace Il2CppDumper
         IL2CPP_RGCTX_DATA_METHOD,
         IL2CPP_RGCTX_DATA_ARRAY,
         IL2CPP_RGCTX_DATA_CONSTRAINED,
+        IL2CPP_RGCTX_DATA_CONSTRAINED_CALL_METHOD, // 108+
+        IL2CPP_RGCTX_DATA_FIELD_OFFSET_TYPE, // 108+
+        IL2CPP_RGCTX_DATA_FIELD_OFFSET_FIELD, // 108+
     }
 
     public class Il2CppRGCTXDefinitionData
@@ -604,12 +686,14 @@ namespace Il2CppDumper
         public int type_pre29;
         [Version(Min = 29)]
         public ulong type_post29;
+        // inline up to 27.1 and filled from the metadata file for 108+, otherwise _data points into the binary
         [Version(Max = 27.1)]
         public Il2CppRGCTXDefinitionData data;
         [Version(Min = 27.2)]
         public ulong _data;
     }
 
+    // Version 108+ drops kIl2CppMetadataUsageIl2CppType on disk, use Metadata.DecodeUsage
     public enum Il2CppMetadataUsage
     {
         kIl2CppMetadataUsageInvalid,

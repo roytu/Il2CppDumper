@@ -235,6 +235,7 @@ namespace Il2CppDumper
                     var metadataRegistration = Convert.ToUInt64(Console.ReadLine(), 16);
                     il2Cpp.Init(codeRegistration, metadataRegistration);
                 }
+                il2Cpp.InitFromMetadata(metadata);
                 if (il2Cpp.Version >= 27 && il2Cpp.IsDumped)
                 {
                     var typeDef = metadata.typeDefs[0];
