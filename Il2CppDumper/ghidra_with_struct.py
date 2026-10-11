@@ -7,9 +7,12 @@ import os
 from java.math import BigInteger
 from ghidra.app.util.cparser.C import CParserUtils
 from ghidra.app.cmd.function import ApplyFunctionSignatureCmd
+from ghidra.app.cmd.function import CreateFunctionCmd
 from ghidra.app.cmd.disassemble import DisassembleCommand
+from ghidra.app.plugin.core.analysis import AutoAnalysisManager
 from ghidra.program.model.address import AddressSet
 from ghidra.program.model.data import CategoryPath, DataTypeConflictHandler, EnumDataType
+from ghidra.program.model.symbol import SourceType
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
 from ghidra.program.model.symbol import SymbolUtilities
 from ghidra.util.exception import CancelledException
@@ -29,6 +32,9 @@ symbolTable = currentProgram.getSymbolTable()
 baseAddress = currentProgram.getImageBase()
 isArm32 = currentProgram.getLanguage().getProcessor().toString() == "ARM"
 tmode = currentProgram.getProgramContext().getRegister("TMode") if isArm32 else None
+# il2cpp methods use the platform's C convention; a signature that says so spares the Call Convention ID
+# analyzer from decompiling every method to guess it
+defaultConvention = currentProgram.getCompilerSpec().getDefaultCallingConvention().getName()
 
 def ask_file(title, index):
     # script arguments make the script runnable headless:
@@ -95,13 +101,33 @@ def set_type(addr, type):
             print("Warning: unable to set type (CodeUnitInsertionException)")
 
 
-def make_function(start):
-    func = getFunctionAt(start)
-    if func is None:
-        try:
-            createFunction(start, None)
-        except:
-            print("Warning: Unable to create function")
+def make_functions(addresses):
+    # disassemble whatever is still raw bytes, then create the functions
+    todo = AddressSet()
+    for addr in addresses:
+        if listing.getInstructionAt(addr) is None:
+            todo.add(addr)
+    if not todo.isEmpty():
+        monitor.setMessage("Disassembling")
+        cmd = DisassembleCommand(todo, None, True)
+        cmd.enableCodeAnalysis(False)
+        cmd.applyTo(currentProgram, monitor)
+    # every entry first becomes a one-instruction function, then Ghidra computes all the bodies in one pass;
+    # created one at a time in address order, a body ran into the next method, which was not a function yet,
+    # and had to be carved up again when its turn came: 1078 s instead of 61 s for 414k methods
+    entries = AddressSet()
+    for addr in addresses:
+        monitor.checkCancelled()
+        monitor.incrementProgress(1)
+        if getFunctionAt(addr) is None:
+            try:
+                listing.createFunction(None, addr, AddressSet(addr, addr), SourceType.DEFAULT)
+            except:
+                print("Warning: Unable to create function")
+                continue
+        entries.add(addr)
+    monitor.setMessage("Function bodies")
+    CreateFunctionCmd(entries, False).applyTo(currentProgram, monitor)
 
 def set_sig(addr, name, sig):
     try:
@@ -122,6 +148,7 @@ def set_sig(addr, name, sig):
     if typeSig is not None:
         try:
             typeSig.setName(name.replace(' ', '-'))
+            typeSig.setCallingConvention(defaultConvention)
             ApplyFunctionSignatureCmd(addr, typeSig, USER_DEFINED, False, True).applyTo(currentProgram)
         except:
             print("Warning: unable to set Signature. ApplyFunctionSignatureCmd() Failed.")
@@ -206,34 +233,35 @@ if "ScriptMetadataMethod" in data and "ScriptMetadataMethod" in processFields:
         setEOLComment(addr, name)
         monitor.incrementProgress(1)
 
-if "Addresses" in data and "Addresses" in processFields:
-    addresses = data["Addresses"]
-    monitor.initialize(len(addresses))
-    monitor.setMessage("Addresses")
-    for index in range(len(addresses) - 1):
-        start = get_addr(addresses[index])
-        make_function(start)
-        monitor.incrementProgress(1)
+# in the GUI every created function would otherwise queue the full analyzer set as soon as the script ends;
+# start Analysis > Auto Analyze yourself once the import is done, with the analyzers you want
+analysisManager = AutoAnalysisManager.getAnalysisManager(currentProgram)
+ignoredChanges = analysisManager.setIgnoreChanges(True)
+try:
+    if "Addresses" in data and "Addresses" in processFields:
+        addresses = data["Addresses"]
+        monitor.initialize(len(addresses))
+        monitor.setMessage("Addresses")
+        make_functions([get_addr(addr) for addr in addresses])
 
-if "ScriptMethod" in data and "ScriptMethod" in processFields:
-    scriptMethods = data["ScriptMethod"]
-    for scriptMethod in scriptMethods:
-        addr = get_addr(scriptMethod["Address"])
-        sig = scriptMethod["Signature"][:-1]
-        name = scriptMethod["Name"]
-        if "Namespace" in scriptMethod:
-            name = name[name.rfind("$$") + 2:]
-        set_sig(addr, name, sig)
-
-# Disassemble all methods
-for methodAddress in methodAddresses:
-    # start, restrictedSet, followFlow
-    cmd = DisassembleCommand(
-            methodAddress,              # address
-            None,                       # restrictedSet
-            True                        # followFlow
-    )
-    cmd.enableCodeAnalysis(False)
-    cmd.applyTo(currentProgram, monitor)
+    if "ScriptMethod" in data and "ScriptMethod" in processFields:
+        scriptMethods = data["ScriptMethod"]
+        monitor.initialize(len(scriptMethods))
+        monitor.setMessage("Signatures")
+        for scriptMethod in scriptMethods:
+            monitor.incrementProgress(1)
+            addr = get_addr(scriptMethod["Address"])
+            sig = scriptMethod["Signature"][:-1]
+            name = scriptMethod["Name"]
+            if "Namespace" in scriptMethod:
+                name = name[name.rfind("$$") + 2:]
+            func = getFunctionAt(addr)
+            if func is not None and func.isThunk():
+                # a method whose body is a tail call is still its own method, not a thunk of the callee
+                func.setThunkedFunction(None)
+            set_sig(addr, name, sig)
+finally:
+    currentProgram.flushEvents()
+    analysisManager.setIgnoreChanges(ignoredChanges)
 
 print('Script finished!')
