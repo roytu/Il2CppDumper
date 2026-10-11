@@ -120,6 +120,7 @@ namespace Il2CppDumper
                             scriptMethod.Address = il2Cpp.GetRVA(methodPointer);
                             var methodFullName = UniqueMethodName(typeName + "$$" + methodName, methodNames);
                             scriptMethod.Name = methodFullName;
+                            scriptMethod.Namespace = MethodNamespace(imageName, typeDef, typeName);
 
                             var methodReturnType = il2Cpp.types[methodDef.returnType];
                             var returnType = ParseType(methodReturnType);
@@ -190,6 +191,7 @@ namespace Il2CppDumper
                                     (var methodSpecTypeName, var methodSpecMethodName) = executor.GetMethodSpecName(methodSpec, true);
                                     var methodFullName = UniqueMethodName(methodSpecTypeName + "$$" + methodSpecMethodName, methodNames);
                                     scriptMethod.Name = methodFullName;
+                                    scriptMethod.Namespace = MethodNamespace(imageName, typeDef, methodSpecTypeName);
 
                                     var genericContext = executor.GetMethodSpecGenericContext(methodSpec);
                                     var methodReturnType = il2Cpp.types[methodDef.returnType];
@@ -412,6 +414,24 @@ namespace Il2CppDumper
                 value = x.Value,
                 address = $"0x{x.Address:X}"
             }).ToArray();
+            // il2cpp.h declares every enum as a typedef of its underlying type; the Ghidra script creates enums of that width instead (ScriptEnum)
+            var enumHeader = new StringBuilder();
+            foreach (var typeDef in metadata.typeDefs.Where(x => x.IsEnum))
+            {
+                var underlying = il2Cpp.types[typeDef.GetEnumElementTypeIndex(il2Cpp.Version)];
+                var scriptEnum = new ScriptEnum { Name = structNameDic[typeDef] + "_e", Size = GetCSizeAndAlignment(underlying, null).size };
+                enumHeader.Append($"typedef {ParseType(underlying)} {scriptEnum.Name};\n");
+                for (var i = typeDef.fieldStart; i < typeDef.fieldStart + typeDef.field_count; i++)
+                {
+                    var fieldDef = metadata.fieldDefs[i];
+                    if ((il2Cpp.types[fieldDef.typeIndex].attrs & FIELD_ATTRIBUTE_LITERAL) != 0 && metadata.GetFieldDefaultValueFromIndex(i, out var defaultValue) && defaultValue.dataIndex != -1
+                        && executor.TryGetDefaultValue(defaultValue.typeIndex, defaultValue.dataIndex, out var value))
+                    {
+                        scriptEnum.Members[metadata.GetStringFromIndex(fieldDef.nameIndex)] = value is ulong u ? (long)u : Convert.ToInt64(value);
+                    }
+                }
+                json.ScriptEnum.Add(scriptEnum);
+            }
             var jsonOptions = new JsonSerializerOptions() { WriteIndented = true, IncludeFields = true };
             File.WriteAllText(outputDir + "stringliteral.json", JsonSerializer.Serialize(stringLiterals, jsonOptions), new UTF8Encoding(false));
             //写入文件
@@ -479,13 +499,20 @@ namespace Il2CppDumper
                     Console.WriteLine($"WARNING: This il2cpp version [{il2Cpp.Version}] does not support generating .h files");
                     return;
             }
+            var enumPosition = sb.Length; // il2cpp_ghidra.h leaves the enum typedefs out, the script creates the enums before parsing it
             // fields sit at their binary offsets with the padding spelled out, so nothing may be realigned
             sb.Append("#pragma pack(push, 1)\n");
             sb.Append(headerStruct);
             sb.Append(arrayClassHeader);
             sb.Append("#pragma pack(pop)\n");
             sb.Append(methodInfoHeader);
-            File.WriteAllText(outputDir + "il2cpp.h", sb.ToString());
+            File.WriteAllText(outputDir + "il2cpp.h", sb.ToString().Insert(enumPosition, enumHeader.ToString()));
+            // Ghidra's C parser knows neither stdint.h nor bool
+            using (var writer = new StreamWriter(outputDir + "il2cpp_ghidra.h"))
+            {
+                writer.Write(il2Cpp.Is32Bit ? HeaderConstants.GhidraTypedefs32 : HeaderConstants.GhidraTypedefs64);
+                writer.Write(sb);
+            }
         }
 
         // Unity 2022.2 added stack_slot_size to Il2CppClass without a metadata version change, moving flags from
@@ -640,6 +667,28 @@ namespace Il2CppDumper
             }
         }
 
+        // image/namespace/outer type/type: where the Ghidra script files the type's methods, typeName being the type as the method names it
+        private string MethodNamespace(string imageName, Il2CppTypeDefinition typeDef, string typeName)
+        {
+            var path = new List<string>();
+            var declaring = typeDef;
+            while (declaring.declaringTypeIndex != -1)
+            {
+                declaring = executor.GetTypeDefinitionFromIl2CppType(il2Cpp.types[declaring.declaringTypeIndex]);
+                path.Insert(0, metadata.GetStringFromIndex(declaring.nameIndex).Split('`')[0]);
+            }
+            var @namespace = metadata.GetStringFromIndex(declaring.namespaceIndex);
+            if (@namespace != "")
+            {
+                path.Insert(0, @namespace);
+            }
+            path.Insert(0, imageName);
+            // typeName starts with the same prefix Il2CppExecutor.GetTypeDefName puts in front of the type's own name
+            var prefix = typeDef.declaringTypeIndex != -1 ? executor.GetTypeName(il2Cpp.types[typeDef.declaringTypeIndex], true, true) + "." : @namespace != "" ? @namespace + "." : "";
+            path.Add(typeName[prefix.Length..]);
+            return string.Join("/", path);
+        }
+
         // overloads share a name, the second one on becomes Name_1, Name_2, ...
         private static string UniqueMethodName(string name, HashSet<string> used)
         {
@@ -725,7 +774,7 @@ namespace Il2CppDumper
                         var typeDef = executor.GetTypeDefinitionFromIl2CppType(il2CppType);
                         if (typeDef.IsEnum)
                         {
-                            return ParseType(il2Cpp.types[typeDef.GetEnumElementTypeIndex(il2Cpp.Version)]);
+                            return structNameDic[typeDef] + "_e";
                         }
                         return structNameDic[typeDef] + "_o";
                     }
@@ -765,7 +814,7 @@ namespace Il2CppDumper
                         {
                             if (typeDef.IsEnum)
                             {
-                                return ParseType(il2Cpp.types[typeDef.GetEnumElementTypeIndex(il2Cpp.Version)]);
+                                return structNameDic[typeDef] + "_e";
                             }
                             return typeStructName + "_o";
                         }
