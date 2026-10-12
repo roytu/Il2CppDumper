@@ -8,6 +8,7 @@ namespace Il2CppDumper
         public List<ScriptString> ScriptString = new();
         public List<ScriptMetadata> ScriptMetadata = new();
         public List<ScriptMetadataMethod> ScriptMetadataMethod = new();
+        public List<ScriptEnum> ScriptEnum = new();
         public ulong[] Addresses;
     }
 
@@ -17,6 +18,7 @@ namespace Il2CppDumper
         public string Name;
         public string Signature;
         public string TypeSignature;
+        public string Namespace;
     }
 
     public class ScriptString
@@ -37,5 +39,12 @@ namespace Il2CppDumper
         public ulong Address;
         public string Name;
         public ulong MethodAddress;
+    }
+
+    public class ScriptEnum
+    {
+        public string Name;
+        public int Size;
+        public Dictionary<string, long> Members = new();
     }
 }

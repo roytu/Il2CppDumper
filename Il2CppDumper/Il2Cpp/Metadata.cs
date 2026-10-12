@@ -18,7 +18,7 @@ namespace Il2CppDumper
         public Il2CppParameterDefinition[] parameterDefs;
         public Il2CppFieldDefinition[] fieldDefs;
         private readonly Dictionary<int, Il2CppFieldDefaultValue> fieldDefaultValuesDic;
-        private readonly Dictionary<ParameterIndex, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
+        private readonly Dictionary<int, Il2CppParameterDefaultValue> parameterDefaultValuesDic;
         public Il2CppPropertyDefinition[] propertyDefs;
         public Il2CppCustomAttributeTypeRange[] attributeTypeRanges;
         public Il2CppCustomAttributeDataRange[] attributeDataRanges;
@@ -27,6 +27,7 @@ namespace Il2CppDumper
         private readonly Il2CppMetadataUsageList[] metadataUsageLists;
         private readonly Il2CppMetadataUsagePair[] metadataUsagePairs;
         public int[] attributeTypes;
+        public int[] interfaceIndices; // TypeIndex, indexed by interfacesStart
         public readonly Il2CppInterfaceOffsetPair[] interfaceOffsetPairs;
         public Dictionary<Il2CppMetadataUsage, SortedDictionary<uint, uint>> metadataUsageDic;
         public long metadataUsagesCount;
@@ -38,15 +39,15 @@ namespace Il2CppDumper
         public Il2CppConstraintIndex[] constraintIndices;
         public uint[] vtableMethods;
         public Il2CppRGCTXDefinition[] rgctxEntries;
+        // Version 108+
+        public Il2CppTokenRangePair[] rgctxRanges;
+        public Il2CppRGCTXDefinition[] rgctxValues;
+        // Version 110+
+        public uint[] generatedMethodTokens;
+        private readonly Dictionary<int, Il2CppGeneratedMethodTypeInfo> generatedMethodTypeInfoDic = new();
+        private int generatedMethodsStart;
 
         private readonly Dictionary<uint, string> stringCache = new();
-
-        // Types with custom sizes
-        // Keep in sync with vm/MetadataDeserialization.h
-        public static int typeIndexSize;
-        public static int typeDefinitionIndexSize;
-        public static int genericContainerIndexSize;
-        public static int parameterIndexSize;
 
         public Metadata(Stream stream) : base(stream)
         {
@@ -60,7 +61,7 @@ namespace Il2CppDumper
             {
                 throw new InvalidDataException("ERROR: Metadata file supplied is not valid metadata file.");
             }
-            if (version < 16 || version > 39)
+            if (version < 16 || version > 111 || (version > 39 && version < 106) || version == 109)
             {
                 throw new NotSupportedException($"ERROR: Metadata file supplied is not a supported version[{version}].");
             }
@@ -83,36 +84,7 @@ namespace Il2CppDumper
                 }
             }
 
-            // Set custom sizes
-            if (Version >= 38)
-            {
-                // Current definition of Il2CppParameterDefinition has size 8 (not counting typeIndex);
-                //
-                //  public class Il2CppParameterDefinition
-                //  {
-                //      public uint nameIndex;
-                //      public uint token;
-                //      [Version(Max = 24)]
-                //      public int customAttributeIndex;
-                //      public TypeIndex typeIndex;
-                //  }
-                //
-                // By computing the size of this as reported by the header, we can infer TypeIndex size
-
-                int sizeOfIl2CppParameterDefinition = (int)(header.parameters.size / header.parameters.count);
-                typeIndexSize = sizeOfIl2CppParameterDefinition - 8;
-                typeDefinitionIndexSize = GetIndexSize((int)header.typeDefinitions.count);
-                genericContainerIndexSize = GetIndexSize((int)header.genericContainers.count);
-                parameterIndexSize = GetIndexSize((int)header.parameters.count);
-            }
-            else
-            {
-                // Before version 38, these were always ints
-                typeIndexSize = 4;
-                typeDefinitionIndexSize = 4;
-                genericContainerIndexSize = 4;
-                parameterIndexSize = 4;
-            }
+            InitIndexSizes();
 
             imageDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppImageDefinition>(header.imagesOffset, header.imagesSize)
@@ -160,9 +132,12 @@ namespace Il2CppDumper
             propertyDefs = Version < 38
                 ? ReadMetadataClassArray<Il2CppPropertyDefinition>(header.propertiesOffset, header.propertiesSize)
                 : ReadMetadataClassArray<Il2CppPropertyDefinition>(header.properties.offset, (int)header.properties.size);
+            interfaceIndices = Version < 38
+                ? ReadClassArray<int>(header.interfacesOffset, header.interfacesSize / 4)
+                : ReadIndexArray(IndexKind.Type, header.interfaces.offset, (int)header.interfaces.size);
             interfaceOffsetPairs = Version < 38
-                ? ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfacesOffset, header.interfacesSize)
-                : ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfaces.offset, (int)header.interfaces.size);
+                ? ReadMetadataClassArray<Il2CppInterfaceOffsetPair>((uint)header.interfaceOffsetsOffset, header.interfaceOffsetsSize)
+                : ReadMetadataClassArray<Il2CppInterfaceOffsetPair>(header.interfaceOffsets.offset, (int)header.interfaceOffsets.size);
             nestedTypeIndices = Version < 38
                 ? ReadClassArray<int>(header.nestedTypesOffset, header.nestedTypesSize / 4)
                 : ReadClassArray<int>(header.nestedTypes.offset, header.nestedTypes.size / 4);
@@ -233,6 +208,81 @@ namespace Il2CppDumper
             {
                 rgctxEntries = ReadMetadataClassArray<Il2CppRGCTXDefinition>(header.rgctxEntriesOffset, header.rgctxEntriesCount);
             }
+            if (Version >= 108)
+            {
+                rgctxRanges = ReadMetadataClassArray<Il2CppTokenRangePair>(header.rgctxRanges.offset, (int)header.rgctxRanges.size);
+                rgctxValues = ReadRGCTXValues();
+            }
+            if (Version >= 110)
+            {
+                var generatedMethodTypeInfos = ReadClassArray<Il2CppGeneratedMethodTypeInfo>(header.generatedMethodTypeInfos.offset, header.generatedMethodTypeInfos.count);
+                generatedMethodTokens = ReadClassArray<uint>(header.generatedMethodTokens.offset, header.generatedMethodTokens.size / 4);
+                foreach (var info in generatedMethodTypeInfos)
+                {
+                    generatedMethodTypeInfoDic[info.typeIndex] = info;
+                }
+                generatedMethodsStart = methodDefs.Length - generatedMethodTokens.Length;
+                SynthesizeTokens();
+            }
+            if (Version >= 111)
+            {
+                ReadMethodSigs();
+            }
+        }
+
+        // Keep in sync with SerializedIndexSizes in vm/GlobalMetadata.cpp
+        private void InitIndexSizes()
+        {
+            if (Version < 38)
+            {
+                return;
+            }
+            // TypeIndex size comes from the binary's typesCount, infer it from the stride of the interfaces section instead
+            if (header.interfaces.count > 0)
+            {
+                IndexSizes[(int)IndexKind.Type] = (int)(header.interfaces.size / header.interfaces.count);
+            }
+            else if (header.fields.count > 0)
+            {
+                IndexSizes[(int)IndexKind.Type] = (int)(header.fields.size / header.fields.count) - (Version >= 110 ? 4 : 8);
+            }
+            IndexSizes[(int)IndexKind.TypeDefinition] = GetIndexSize((int)header.typeDefinitions.count);
+            IndexSizes[(int)IndexKind.GenericContainer] = GetIndexSize((int)header.genericContainers.count);
+            if (Version >= 39)
+            {
+                IndexSizes[(int)IndexKind.Parameter] = GetIndexSize((int)header.parameters.count);
+            }
+            if (Version >= 106)
+            {
+                IndexSizes[(int)IndexKind.GenericParameter] = GetIndexSize((int)header.genericParameters.count);
+                IndexSizes[(int)IndexKind.Interfaces] = GetIndexSize((int)header.interfaceOffsets.count);
+                IndexSizes[(int)IndexKind.Event] = GetIndexSize((int)header.events.count);
+                IndexSizes[(int)IndexKind.Property] = GetIndexSize((int)header.properties.count);
+                IndexSizes[(int)IndexKind.NestedType] = GetIndexSize((int)header.nestedTypes.count);
+                IndexSizes[(int)IndexKind.Field] = GetIndexSize((int)header.fields.count);
+                IndexSizes[(int)IndexKind.DefaultValueData] = GetIndexSize((int)header.fieldAndParameterDefaultValueData.count);
+                IndexSizes[(int)IndexKind.Method] = GetIndexSize((int)header.methods.count);
+            }
+            if (Version >= 108)
+            {
+                var genericMethodCount = header.methodSpecsOnGenericType.count + header.genericMethodSpecsOnType.count + header.methodSpecs.count;
+                IndexSizes[(int)IndexKind.GenericMethod] = GetIndexSize((int)genericMethodCount);
+                IndexSizes[(int)IndexKind.AdjustorThunk] = GetIndexSize((int)header.genericMethodFunctionsDefinitionsWithAdjustor.count);
+                // GenericInstIndex size comes from the binary's genericInstsCount, infer it from the method spec stride instead
+                var methodWidth = IndexSizes[(int)IndexKind.Method];
+                if (header.methodSpecs.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = ((int)(header.methodSpecs.size / header.methodSpecs.count) - methodWidth) / 2;
+                }
+                else if (header.genericMethodSpecsOnType.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = (int)(header.genericMethodSpecsOnType.size / header.genericMethodSpecsOnType.count) - methodWidth;
+                }
+                else if (header.methodSpecsOnGenericType.count > 0)
+                {
+                    IndexSizes[(int)IndexKind.GenericInst] = (int)(header.methodSpecsOnGenericType.size / header.methodSpecsOnGenericType.count) - methodWidth;
+                }
+            }
         }
 
         public static int GetIndexSize(int count)
@@ -247,6 +297,179 @@ namespace Il2CppDumper
             return ReadClassArray<T>(addr, count / SizeOf(typeof(T)));
         }
 
+        // Version 108+: uint8 type + uint32 data, stride 5
+        private Il2CppRGCTXDefinition[] ReadRGCTXValues()
+        {
+            var count = (int)header.rgctxValues.count;
+            var stride = count > 0 ? (int)(header.rgctxValues.size / header.rgctxValues.count) : 5;
+            var result = new Il2CppRGCTXDefinition[count];
+            for (var i = 0; i < count; i++)
+            {
+                Position = header.rgctxValues.offset + (ulong)(i * stride);
+                var type = ReadByte();
+                var data = ReadInt32();
+                result[i] = new Il2CppRGCTXDefinition
+                {
+                    type_post29 = type,
+                    data = new Il2CppRGCTXDefinitionData { rgctxDataDummy = data }
+                };
+            }
+            return result;
+        }
+
+        // Version 111+: per method, returnType (TypeIndex) + compressed paramCount + paramCount TypeIndex
+        private void ReadMethodSigs()
+        {
+            foreach (var methodDef in methodDefs)
+            {
+                Position = header.methodSigs.offset + (ulong)methodDef.methodSigOffset;
+                methodDef.returnType = ReadIndex(IndexKind.Type);
+                var parameterCount = ReadCompressedUInt32();
+                methodDef.parameterCount = (ushort)parameterCount;
+                for (var j = 0; j < parameterCount; j++)
+                {
+                    parameterDefs[methodDef.parameterStart + j].typeIndex = ReadIndex(IndexKind.Type);
+                }
+            }
+        }
+
+        // Version 110+: tokens are no longer stored, rebuild them the same way vm/GlobalMetadata.cpp does
+        private void SynthesizeTokens()
+        {
+            const uint TypeDef = 0x02000000;
+            const uint FieldDef = 0x04000000;
+            const uint MethodDef = 0x06000000;
+            const uint Event = 0x14000000;
+            const uint Property = 0x17000000;
+
+            foreach (var imageDef in imageDefs)
+            {
+                var typeEnd = imageDef.typeStart + imageDef.typeCount;
+                for (var typeIndex = imageDef.typeStart; typeIndex < typeEnd; typeIndex++)
+                {
+                    var typeDef = typeDefs[typeIndex];
+                    typeDef.token = TypeDef | (uint)(typeIndex - imageDef.typeStart + 1);
+                    for (var i = 0; i < typeDef.field_count; i++)
+                    {
+                        var fieldIndex = typeDef.fieldStart + i;
+                        fieldDefs[fieldIndex].token = FieldDef | (uint)(fieldIndex - imageDef.fieldStart + 1);
+                    }
+                    for (var i = 0; i < typeDef.property_count; i++)
+                    {
+                        var propertyIndex = typeDef.propertyStart + i;
+                        propertyDefs[propertyIndex].token = Property | (uint)(propertyIndex - imageDef.propertyStart + 1);
+                    }
+                    for (var i = 0; i < typeDef.event_count; i++)
+                    {
+                        var eventIndex = typeDef.eventStart + i;
+                        eventDefs[eventIndex].token = Event | (uint)(eventIndex - imageDef.eventStart + 1);
+                    }
+                    generatedMethodTypeInfoDic.TryGetValue(typeIndex, out var generatedInfo);
+                    for (var i = 0; i < typeDef.method_count; i++)
+                    {
+                        var methodIndex = GetTypeMethodIndex(typeDef, typeIndex, i);
+                        var methodDef = methodDefs[methodIndex];
+                        if (typeDef.HasGeneratedMethods && generatedInfo != null && methodIndex >= generatedInfo.generatedMethodStart)
+                        {
+                            methodDef.token = generatedMethodTokens[methodIndex - generatedMethodsStart];
+                        }
+                        else
+                        {
+                            methodDef.token = MethodDef | (uint)(methodIndex - imageDef.methodStart + 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Version 110+: a type with generated methods has them in a second range at generatedMethodStart
+        public int GetTypeMethodIndex(Il2CppTypeDefinition typeDef, int typeDefIndex, int localIndex)
+        {
+            if (Version < 110 || !typeDef.HasGeneratedMethods || !generatedMethodTypeInfoDic.TryGetValue(typeDefIndex, out var info))
+            {
+                return typeDef.methodStart + localIndex;
+            }
+            var nonGeneratedMethodCount = typeDef.method_count - (int)info.generatedMethodCount;
+            if (localIndex < nonGeneratedMethodCount)
+            {
+                return typeDef.methodStart + localIndex;
+            }
+            return info.generatedMethodStart + (localIndex - nonGeneratedMethodCount);
+        }
+
+        // Version 108+: the three method spec tables form one GenericMethodIndex space in this order
+        public (Il2CppMethodSpec[] methodSpecs, Il2CppGenericMethodFunctionsDefinitions[] genericMethodTable) ReadGenericTables(long genericMethodPointersCount, long invokerPointersCount)
+        {
+            IndexSizes[(int)IndexKind.MethodPointerTable] = GetIndexSize((int)genericMethodPointersCount);
+            IndexSizes[(int)IndexKind.InvokerTable] = GetIndexSize((int)invokerPointersCount);
+            var expectedStride = IndexSizes[(int)IndexKind.GenericMethod] + IndexSizes[(int)IndexKind.MethodPointerTable] + IndexSizes[(int)IndexKind.InvokerTable];
+            CheckStride(header.genericMethodFunctionsDefinitions, expectedStride, "genericMethodFunctionsDefinitions");
+            CheckStride(header.genericMethodFunctionsDefinitionsWithAdjustor, expectedStride + IndexSizes[(int)IndexKind.AdjustorThunk], "genericMethodFunctionsDefinitionsWithAdjustor");
+
+            var onGenericType = ReadMetadataClassArray<Il2CppMethodSpecOnGenericType>(header.methodSpecsOnGenericType.offset, (int)header.methodSpecsOnGenericType.size);
+            var genericOnType = ReadMetadataClassArray<Il2CppGenericMethodSpecOnType>(header.genericMethodSpecsOnType.offset, (int)header.genericMethodSpecsOnType.size);
+            var both = ReadMetadataClassArray<Il2CppMetadataMethodSpec>(header.methodSpecs.offset, (int)header.methodSpecs.size);
+            var methodSpecs = new Il2CppMethodSpec[onGenericType.Length + genericOnType.Length + both.Length];
+            var n = 0;
+            foreach (var spec in onGenericType)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = spec.classIndexIndex, methodIndexIndex = -1 };
+            }
+            foreach (var spec in genericOnType)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = -1, methodIndexIndex = spec.methodIndexIndex };
+            }
+            foreach (var spec in both)
+            {
+                methodSpecs[n++] = new Il2CppMethodSpec { methodDefinitionIndex = spec.methodDefinitionIndex, classIndexIndex = spec.classIndexIndex, methodIndexIndex = spec.methodIndexIndex };
+            }
+
+            var plain = ReadMetadataClassArray<Il2CppMetadataGenericMethodFunctions>(header.genericMethodFunctionsDefinitions.offset, (int)header.genericMethodFunctionsDefinitions.size);
+            var withAdjustor = ReadMetadataClassArray<Il2CppMetadataGenericMethodFunctionsWithAdjustor>(header.genericMethodFunctionsDefinitionsWithAdjustor.offset, (int)header.genericMethodFunctionsDefinitionsWithAdjustor.size);
+            var table = new Il2CppGenericMethodFunctionsDefinitions[plain.Length + withAdjustor.Length];
+            n = 0;
+            foreach (var entry in plain)
+            {
+                table[n++] = new Il2CppGenericMethodFunctionsDefinitions
+                {
+                    genericMethodIndex = entry.genericMethodIndex,
+                    indices = new Il2CppGenericMethodIndices { methodIndex = entry.methodIndex, invokerIndex = entry.invokerIndex, adjustorThunk = -1 }
+                };
+            }
+            foreach (var entry in withAdjustor)
+            {
+                table[n++] = new Il2CppGenericMethodFunctionsDefinitions
+                {
+                    genericMethodIndex = entry.genericMethodIndex,
+                    indices = new Il2CppGenericMethodIndices { methodIndex = entry.methodIndex, invokerIndex = entry.invokerIndex, adjustorThunk = entry.adjustorThunkIndex }
+                };
+            }
+
+            return (methodSpecs, table);
+        }
+
+        private static void CheckStride(Il2CppSectionMetadata section, int expectedStride, string name)
+        {
+            if (section.count > 0 && section.size / section.count != expectedStride)
+            {
+                throw new InvalidDataException($"ERROR: Unexpected {name} stride {section.size / section.count}, expected {expectedStride}.");
+            }
+        }
+
+        public Dictionary<uint, Il2CppRGCTXDefinition[]> GetImageRGCTXs(Il2CppImageDefinition imageDef)
+        {
+            var result = new Dictionary<uint, Il2CppRGCTXDefinition[]>();
+            var end = imageDef.rgctxRangesStart + imageDef.rgctxRangesCount;
+            for (var i = imageDef.rgctxRangesStart; i < end; i++)
+            {
+                var range = rgctxRanges[i];
+                var defs = new Il2CppRGCTXDefinition[range.range.length];
+                Array.Copy(rgctxValues, range.range.start, defs, 0, range.range.length);
+                result[range.token] = defs;
+            }
+            return result;
+        }
+
         public bool GetFieldDefaultValueFromIndex(int index, out Il2CppFieldDefaultValue value)
         {
             return fieldDefaultValuesDic.TryGetValue(index, out value);
@@ -254,7 +477,7 @@ namespace Il2CppDumper
 
         public bool GetParameterDefaultValueFromIndex(int index, out Il2CppParameterDefaultValue value)
         {
-            return parameterDefaultValuesDic.TryGetValue(new ParameterIndex(index), out value);
+            return parameterDefaultValuesDic.TryGetValue(index, out value);
         }
 
         public uint GetDefaultValueFromIndex(int index)
@@ -341,6 +564,17 @@ namespace Il2CppDumper
             return (index & 0xE0000000) >> 29;
         }
 
+        // Version 108 removed kIl2CppMetadataUsageIl2CppType, later kinds shift down by one
+        public Il2CppMetadataUsage DecodeUsage(uint encodedIndex)
+        {
+            var usage = GetEncodedIndexType(encodedIndex);
+            if (Version >= 108 && usage >= 2)
+            {
+                usage++;
+            }
+            return (Il2CppMetadataUsage)usage;
+        }
+
         public uint GetDecodedMethodIndex(uint index)
         {
             if (Version >= 27)
@@ -361,8 +595,13 @@ namespace Il2CppDumper
                     if (Version < attr.Min || Version > attr.Max)
                         continue;
                 }
+                var indexAttribute = i.GetCustomAttribute<IndexAttribute>();
                 var fieldType = i.FieldType;
-                if (fieldType.IsPrimitive)
+                if (indexAttribute != null)
+                {
+                    size += IndexSizes[(int)indexAttribute.Kind];
+                }
+                else if (fieldType.IsPrimitive)
                 {
                     size += GetPrimitiveTypeSize(fieldType.Name);
                 }
@@ -375,22 +614,6 @@ namespace Il2CppDumper
                 {
                     var arrayLengthAttribute = i.GetCustomAttribute<ArrayLengthAttribute>();
                     size += arrayLengthAttribute.Length;
-                }
-                else if (fieldType == typeof(TypeIndex))
-                {
-                    size += typeIndexSize;
-                }
-                else if (fieldType == typeof(TypeDefinitionIndex))
-                {
-                    size += typeDefinitionIndexSize;
-                }
-                else if (fieldType == typeof(GenericContainerIndex))
-                {
-                    size += genericContainerIndexSize;
-                }
-                else if (fieldType == typeof(ParameterIndex))
-                {
-                    size += parameterIndexSize;
                 }
                 else
                 {
@@ -406,6 +629,7 @@ namespace Il2CppDumper
             {
                 "Int32" or "UInt32" => 4,
                 "Int16" or "UInt16" => 2,
+                "Byte" => 1,
                 _ => 0,
             };
         }

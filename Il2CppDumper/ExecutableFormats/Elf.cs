@@ -15,6 +15,8 @@ namespace Il2CppDumper
         private Elf32_Shdr[] sectionTable;
         private Elf32_Phdr pt_dynamic;
 
+        public bool IsX86 => elfHeader.e_machine == EM_386;
+
         /*
         * LDR R1, [X]
         * ADD R0, X, X
@@ -185,6 +187,23 @@ namespace Il2CppDumper
             }
             Console.WriteLine("ERROR: No symbol is detected");
             return false;
+        }
+
+        public override ulong FindExportedSymbol(string name)
+        {
+            if (symbolTable == null)
+            {
+                return 0;
+            }
+            var dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
+            foreach (var symbol in symbolTable)
+            {
+                if (symbol.st_shndx != 0 && ReadStringToNull(dynstrOffset + symbol.st_name) == name)
+                {
+                    return symbol.st_value;
+                }
+            }
+            return 0;
         }
 
         private void ReadSymbol()

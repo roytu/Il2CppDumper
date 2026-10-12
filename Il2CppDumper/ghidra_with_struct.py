@@ -2,15 +2,23 @@
 
 # -*- coding: utf-8 -*-
 import json
+import os
 
+from java.math import BigInteger
 from ghidra.app.util.cparser.C import CParserUtils
 from ghidra.app.cmd.function import ApplyFunctionSignatureCmd
+from ghidra.app.cmd.function import CreateFunctionCmd
 from ghidra.app.cmd.disassemble import DisassembleCommand
+from ghidra.app.plugin.core.analysis import AutoAnalysisManager
 from ghidra.program.model.address import AddressSet
+from ghidra.program.model.data import CategoryPath, DataTypeConflictHandler, EnumDataType
+from ghidra.program.model.symbol import SourceType
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
 from ghidra.program.model.symbol import SymbolUtilities
+from ghidra.util.exception import CancelledException
 
 processFields = [
+    "ScriptEnum",
     "ScriptMethod",
     "ScriptString",
     "ScriptMetadata",
@@ -19,22 +27,60 @@ processFields = [
 ]
 
 functionManager = currentProgram.getFunctionManager()
+listing = currentProgram.getListing()
+symbolTable = currentProgram.getSymbolTable()
 baseAddress = currentProgram.getImageBase()
+isArm32 = currentProgram.getLanguage().getProcessor().toString() == "ARM"
+tmode = currentProgram.getProgramContext().getRegister("TMode") if isArm32 else None
+# il2cpp methods use the platform's C convention; a signature that says so spares the Call Convention ID
+# analyzer from decompiling every method to guess it
+defaultConvention = currentProgram.getCompilerSpec().getDefaultCallingConvention().getName()
+
+def ask_file(title, index):
+    # script arguments make the script runnable headless:
+    #   analyzeHeadless ... -import libil2cpp.so -noanalysis -postScript ghidra_with_struct.py script.json il2cpp_ghidra.h
+    args = getScriptArgs()
+    if len(args) > index:
+        return args[index]
+    if isRunningHeadless():
+        return None
+    try:
+        return askFile(title, "Open").getAbsolutePath()
+    except CancelledException:
+        return None
 
 def get_addr(addr):
+    if isArm32 and addr & 1:
+        # Thumb method pointers carry the mode bit; the context is locked once code exists there
+        address = baseAddress.add(addr - 1)
+        if listing.getInstructionAt(address) is None:
+            currentProgram.getProgramContext().setValue(tmode, address, address, BigInteger.ONE)
+        return address
     return baseAddress.add(addr)
 
-def set_name(addr, name):
-    name = name.replace(b' ', b'-')
-    createLabel(addr, name, True, USER_DEFINED)
+def set_name(addr, name, namespace=None):
+    name = name.replace(' ', '-')
+    createLabel(addr, name, namespace, True, USER_DEFINED)
+
+namespaces = {}
+
+def get_namespace(path):
+    # "image/namespace/outer type/type" -> that chain of Ghidra namespaces, created on first use
+    namespace = namespaces.get(path)
+    if namespace is None:
+        parent, _, name = path.rpartition("/")
+        parentNamespace = get_namespace(parent) if parent else currentProgram.getGlobalNamespace()
+        namespace = symbolTable.getOrCreateNameSpace(parentNamespace, SymbolUtilities.replaceInvalidChars(name, True), USER_DEFINED)
+        namespaces[path] = namespace
+    return namespace
 
 def set_type(addr, type):
     # Requires types (il2cpp.h) to be imported first
-    newType = type.replace(b"*",b" *").replace(b"  ",b" ").strip()
+    newType = type.replace("*"," *").replace("  "," ").strip()
     dataTypes = getDataTypes(newType)
     addrType = None
     if len(dataTypes) == 0:
-        if newType == newType[:-2] + b" *":
+        if newType == newType[:-2] + " *":
             baseType = newType[:-2]
             dataTypes = getDataTypes(baseType)
             if len(dataTypes) == 1:
@@ -51,28 +97,48 @@ def set_type(addr, type):
     else:
         try:
             createData(addr, addrType)
-        except ghidra.program.model.util.CodeUnitInsertionException:
-            print("Warning: unable to set type (CodeUnitInsertionException)")
-        
-
-def make_function(start):
-    func = getFunctionAt(start)
-    if func is None:
-        try:
-            createFunction(start, None)
         except:
-            print("Warning: Unable to create function")
+            print("Warning: unable to set type (CodeUnitInsertionException)")
+
+
+def make_functions(addresses):
+    # disassemble whatever is still raw bytes, then create the functions
+    todo = AddressSet()
+    for addr in addresses:
+        if listing.getInstructionAt(addr) is None:
+            todo.add(addr)
+    if not todo.isEmpty():
+        monitor.setMessage("Disassembling")
+        cmd = DisassembleCommand(todo, None, True)
+        cmd.enableCodeAnalysis(False)
+        cmd.applyTo(currentProgram, monitor)
+    # every entry first becomes a one-instruction function, then Ghidra computes all the bodies in one pass;
+    # created one at a time in address order, a body ran into the next method, which was not a function yet,
+    # and had to be carved up again when its turn came: 1078 s instead of 61 s for 414k methods
+    entries = AddressSet()
+    for addr in addresses:
+        monitor.checkCancelled()
+        monitor.incrementProgress(1)
+        if getFunctionAt(addr) is None:
+            try:
+                listing.createFunction(None, addr, AddressSet(addr, addr), SourceType.DEFAULT)
+            except:
+                print("Warning: Unable to create function")
+                continue
+        entries.add(addr)
+    monitor.setMessage("Function bodies")
+    CreateFunctionCmd(entries, False).applyTo(currentProgram, monitor)
 
 def set_sig(addr, name, sig):
-    try: 
+    try:
         typeSig = CParserUtils.parseSignature(None, currentProgram, sig, False)
-    except ghidra.app.util.cparser.C.ParseException:
+    except:
         print("Warning: Unable to parse")
         print(sig)
         print("Attempting to modify...")
         # try to fix by renaming the parameters
         try:
-            newSig = sig.replace(", ","ext, ").replace("\)","ext\)")
+            newSig = sig.replace(", ","ext, ").replace(")","ext)")
             typeSig = CParserUtils.parseSignature(None, currentProgram, newSig, False)
         except:
             print("Warning: also unable to parse")
@@ -81,14 +147,35 @@ def set_sig(addr, name, sig):
             return
     if typeSig is not None:
         try:
-            typeSig.setName(name)
+            typeSig.setName(name.replace(' ', '-'))
+            typeSig.setCallingConvention(defaultConvention)
             ApplyFunctionSignatureCmd(addr, typeSig, USER_DEFINED, False, True).applyTo(currentProgram)
         except:
             print("Warning: unable to set Signature. ApplyFunctionSignatureCmd() Failed.")
 
-f = askFile("script.json from Il2cppdumper", "Open")
-data = json.loads(open(f.absolutePath, 'rb').read().decode('utf-8'))
+f = ask_file("script.json from Il2cppdumper", 0)
+if f is None:
+    raise CancelledException()
+data = json.loads(open(f, 'rb').read().decode('utf-8'))
 methodAddresses = []
+
+header = ask_file("il2cpp_ghidra.h from Il2CppDumper (cancel to keep the current types)", 1)
+if header is not None:
+    if "ScriptEnum" in data and "ScriptEnum" in processFields:
+        # the header leaves the enums undeclared because the C parser cannot size one; created first, in the
+        # header's category, the parser resolves their names to enums of the right width
+        monitor.setMessage("Enums")
+        enumCategory = CategoryPath("/" + os.path.basename(header))
+        for scriptEnum in data["ScriptEnum"]:
+            enum = EnumDataType(enumCategory, scriptEnum["Name"], scriptEnum["Size"])
+            for member, value in scriptEnum["Members"].items():
+                enum.add(member, value)
+            currentProgram.getDataTypeManager().addDataType(enum, DataTypeConflictHandler.REPLACE_HANDLER)
+    monitor.setMessage("Parsing " + header)
+    results = CParserUtils.parseHeaderFiles(None, [header], None, [], currentProgram.getDataTypeManager(), monitor)
+    if not results.successful():
+        print(results.getFormattedParseMessage(None))
+        raise RuntimeError("il2cpp_ghidra.h did not parse, see the messages above")
 
 if "ScriptMethod" in data and "ScriptMethod" in processFields:
     scriptMethods = data["ScriptMethod"]
@@ -96,8 +183,13 @@ if "ScriptMethod" in data and "ScriptMethod" in processFields:
     monitor.setMessage("Methods")
     for scriptMethod in scriptMethods:
         addr = get_addr(scriptMethod["Address"])
-        name = scriptMethod["Name"].encode("utf-8")
-        set_name(addr, name)
+        name = scriptMethod["Name"]
+        namespace = None
+        if "Namespace" in scriptMethod:
+            # the method goes into image/namespace/type namespaces under its own name
+            namespace = get_namespace(scriptMethod["Namespace"])
+            name = name[name.rfind("$$") + 2:]
+        set_name(addr, name, namespace)
         methodAddresses.append(addr)
         monitor.incrementProgress(1)
 
@@ -108,7 +200,7 @@ if "ScriptString" in data and "ScriptString" in processFields:
     monitor.setMessage("Strings")
     for scriptString in scriptStrings:
         addr = get_addr(scriptString["Address"])
-        value = scriptString["Value"].encode("utf-8")
+        value = scriptString["Value"]
         value_sanitized = SymbolUtilities.replaceInvalidChars(value, True)
         name = f"StringLiteral_{str(index)}_{value_sanitized[:64]}"
         createLabel(addr, name, True, USER_DEFINED)
@@ -122,12 +214,12 @@ if "ScriptMetadata" in data and "ScriptMetadata" in processFields:
     monitor.setMessage("Metadata")
     for scriptMetadata in scriptMetadatas:
         addr = get_addr(scriptMetadata["Address"])
-        name = scriptMetadata["Name"].encode("utf-8")
+        name = scriptMetadata["Name"]
         set_name(addr, name)
         setEOLComment(addr, name)
         monitor.incrementProgress(1)
         if scriptMetadata["Signature"]:
-            set_type(addr, scriptMetadata["Signature"].encode("utf-8"))
+            set_type(addr, scriptMetadata["Signature"])
 
 if "ScriptMetadataMethod" in data and "ScriptMetadataMethod" in processFields:
     scriptMetadataMethods = data["ScriptMetadataMethod"]
@@ -135,40 +227,41 @@ if "ScriptMetadataMethod" in data and "ScriptMetadataMethod" in processFields:
     monitor.setMessage("Metadata Methods")
     for scriptMetadataMethod in scriptMetadataMethods:
         addr = get_addr(scriptMetadataMethod["Address"])
-        name = scriptMetadataMethod["Name"].encode("utf-8")
+        name = scriptMetadataMethod["Name"]
         methodAddr = get_addr(scriptMetadataMethod["MethodAddress"])
         set_name(addr, name)
         setEOLComment(addr, name)
         monitor.incrementProgress(1)
 
-if "Addresses" in data and "Addresses" in processFields:
-    addresses = data["Addresses"]
-    monitor.initialize(len(addresses))
-    monitor.setMessage("Addresses")
-    for index in range(len(addresses) - 1):
-        start = get_addr(addresses[index])
-        make_function(start)
-        monitor.incrementProgress(1)
+# in the GUI every created function would otherwise queue the full analyzer set as soon as the script ends;
+# start Analysis > Auto Analyze yourself once the import is done, with the analyzers you want
+analysisManager = AutoAnalysisManager.getAnalysisManager(currentProgram)
+ignoredChanges = analysisManager.setIgnoreChanges(True)
+try:
+    if "Addresses" in data and "Addresses" in processFields:
+        addresses = data["Addresses"]
+        monitor.initialize(len(addresses))
+        monitor.setMessage("Addresses")
+        make_functions([get_addr(addr) for addr in addresses])
 
-if "ScriptMethod" in data and "ScriptMethod" in processFields:
-    scriptMethods = data["ScriptMethod"]
-    for scriptMethod in scriptMethods:
-        addr = get_addr(scriptMethod["Address"])
-        sig = scriptMethod["Signature"][:-1].encode("utf-8")
-        name = scriptMethod["Name"].encode("utf-8")
-        set_sig(addr, name, sig)
-
-# Disassemble all methods
-addressesToDisassemble = AddressSet(currentProgram.getMemory().getBlock("il2cpp").getAddressRange())
-
-for methodAddress in methodAddresses:
-    # start, restrictedSet, followFlow
-    cmd = DisassembleCommand(
-            methodAddress,              # address
-            addressesToDisassemble,     # restrictedSet
-            True                        # followFlow
-    )
-    cmd.enableCodeAnalysis(False)
-    cmd.applyTo(currentProgram, monitor)
+    if "ScriptMethod" in data and "ScriptMethod" in processFields:
+        scriptMethods = data["ScriptMethod"]
+        monitor.initialize(len(scriptMethods))
+        monitor.setMessage("Signatures")
+        for scriptMethod in scriptMethods:
+            monitor.incrementProgress(1)
+            addr = get_addr(scriptMethod["Address"])
+            sig = scriptMethod["Signature"][:-1]
+            name = scriptMethod["Name"]
+            if "Namespace" in scriptMethod:
+                name = name[name.rfind("$$") + 2:]
+            func = getFunctionAt(addr)
+            if func is not None and func.isThunk():
+                # a method whose body is a tail call is still its own method, not a thunk of the callee
+                func.setThunkedFunction(None)
+            set_sig(addr, name, sig)
+finally:
+    currentProgram.flushEvents()
+    analysisManager.setIgnoreChanges(ignoredChanges)
 
 print('Script finished!')

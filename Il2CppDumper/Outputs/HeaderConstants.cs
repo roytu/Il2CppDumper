@@ -2,6 +2,38 @@
 {
     public static class HeaderConstants
     {
+        public readonly static string GhidraTypedefs64 =
+@"typedef unsigned __int8 uint8_t;
+typedef unsigned __int16 uint16_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
+typedef __int8 int8_t;
+typedef __int16 int16_t;
+typedef __int32 int32_t;
+typedef __int64 int64_t;
+typedef __int64 intptr_t;
+typedef unsigned __int64 uintptr_t;
+typedef unsigned __int64 size_t;
+typedef _Bool bool;
+
+";
+
+        public readonly static string GhidraTypedefs32 =
+@"typedef unsigned __int8 uint8_t;
+typedef unsigned __int16 uint16_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
+typedef __int8 int8_t;
+typedef __int16 int16_t;
+typedef __int32 int32_t;
+typedef __int64 int64_t;
+typedef __int32 intptr_t;
+typedef unsigned __int32 uintptr_t;
+typedef unsigned __int32 size_t;
+typedef _Bool bool;
+
+";
+
         public readonly static string GenericHeader =
 @"typedef void(*Il2CppMethodPointer)();
 
@@ -113,7 +145,11 @@ struct Il2CppClass
     VirtualInvokeData vtable[255];
 };
 
-typedef uintptr_t il2cpp_array_size_t;
+" + MethodInfoV29;
+
+        // Il2CppArrayBounds and MethodInfo are unchanged since metadata 29; const so the initializers above can use it (static readonly fields initialize in declaration order)
+        public const string MethodInfoV29 =
+@"typedef uintptr_t il2cpp_array_size_t;
 typedef int32_t il2cpp_array_lower_bound_t;
 struct Il2CppArrayBounds
 {
@@ -150,6 +186,234 @@ struct MethodInfo
 };
 
 ";
+
+        // Unity 2022.2+ (metadata 29/31 from 2022.2 on, 35/38/39): stack_slot_size added after instance_size, naturalAligment removed
+        public readonly static string HeaderV29_2022 =
+@"struct Il2CppClass_1
+{
+    void* image;
+    void* gc_desc;
+    const char* name;
+    const char* namespaze;
+    Il2CppType byval_arg;
+    Il2CppType this_arg;
+    Il2CppClass* element_class;
+    Il2CppClass* castClass;
+    Il2CppClass* declaringType;
+    Il2CppClass* parent;
+    void *generic_class;
+    void* typeMetadataHandle;
+    void* interopData;
+    Il2CppClass* klass;
+    void* fields;
+    void* events;
+    void* properties;
+    void* methods;
+    Il2CppClass** nestedTypes;
+    Il2CppClass** implementedInterfaces;
+    Il2CppRuntimeInterfaceOffsetPair* interfaceOffsets;
+};
+
+struct Il2CppClass_2
+{
+    Il2CppClass** typeHierarchy;
+    void *unity_user_data;
+    uint32_t initializationExceptionGCHandle;
+    uint32_t cctor_started;
+    uint32_t cctor_finished;
+    size_t cctor_thread;
+    void* genericContainerHandle;
+    uint32_t instance_size;
+    uint32_t stack_slot_size;
+    uint32_t actualSize;
+    uint32_t element_size;
+    int32_t native_size;
+    uint32_t static_fields_size;
+    uint32_t thread_static_fields_size;
+    int32_t thread_static_fields_offset;
+    uint32_t flags;
+    uint32_t token;
+    uint16_t method_count;
+    uint16_t property_count;
+    uint16_t field_count;
+    uint16_t event_count;
+    uint16_t nested_type_count;
+    uint16_t vtable_count;
+    uint16_t interfaces_count;
+    uint16_t interface_offsets_count;
+    uint8_t typeHierarchyDepth;
+    uint8_t genericRecursionDepth;
+    uint8_t rank;
+    uint8_t minimumAlignment;
+    uint8_t packingSize;
+    uint8_t bitflags1;
+    uint8_t bitflags2;
+};
+
+struct Il2CppClass
+{
+    Il2CppClass_1 _1;
+    void* static_fields;
+    Il2CppRGCTXData* rgctx_data;
+    Il2CppClass_2 _2;
+    VirtualInvokeData vtable[255];
+};
+
+" + MethodInfoV29;
+
+        // Unity 6000.5 (metadata 106/107): events/properties/nestedTypes moved after typeHierarchy
+        public readonly static string HeaderV106 =
+@"struct Il2CppClass_1
+{
+    void* image;
+    void* gc_desc;
+    const char* name;
+    const char* namespaze;
+    Il2CppType byval_arg;
+    Il2CppType this_arg;
+    Il2CppClass* element_class;
+    Il2CppClass* castClass;
+    Il2CppClass* declaringType;
+    Il2CppClass* parent;
+    void *generic_class;
+    void* typeMetadataHandle;
+    void* interopData;
+    Il2CppClass* klass;
+    void* fields;
+    void* methods;
+    Il2CppClass** implementedInterfaces;
+    Il2CppRuntimeInterfaceOffsetPair* interfaceOffsets;
+};
+
+struct Il2CppClass_2
+{
+    Il2CppClass** typeHierarchy;
+    void* events;
+    void* properties;
+    void* nestedTypes;
+    void *unity_user_data;
+    uint32_t initializationExceptionGCHandle;
+    uint32_t cctor_started;
+    uint32_t cctor_finished_or_no_cctor;
+    size_t cctor_thread;
+    void* genericContainerHandle;
+    uint32_t instance_size;
+    uint32_t stack_slot_size;
+    uint32_t actualSize;
+    uint32_t element_size;
+    int32_t native_size;
+    uint32_t static_fields_size;
+    uint32_t thread_static_fields_size;
+    int32_t thread_static_fields_offset;
+    uint32_t flags;
+    uint32_t token;
+    uint16_t method_count;
+    uint16_t property_count;
+    uint16_t field_count;
+    uint16_t event_count;
+    uint16_t nested_type_count;
+    uint16_t vtable_count;
+    uint16_t interfaces_count;
+    uint16_t interface_offsets_count;
+    uint8_t typeHierarchyDepth;
+    uint8_t genericRecursionDepth;
+    uint8_t rank;
+    uint8_t minimumAlignment;
+    uint8_t packingSize;
+    uint8_t bitflags1;
+    uint8_t bitflags2;
+};
+
+struct Il2CppClass
+{
+    Il2CppClass_1 _1;
+    void* static_fields;
+    Il2CppRGCTXData* rgctx_data;
+    Il2CppClass_2 _2;
+    VirtualInvokeData vtable[255];
+};
+
+" + MethodInfoV29;
+
+        // Unity 6000.6+ (metadata 108/110/111): implementedInterfaces/interfaceOffsets merged into Il2CppRuntimeInterfaceData* interfaces
+        public readonly static string HeaderV108 =
+@"struct Il2CppRuntimeInterfaceData
+{
+    Il2CppClass* interfaceType;
+    int32_t offset;
+    int32_t depth;
+};
+
+struct Il2CppClass_1
+{
+    void* image;
+    void* gc_desc;
+    const char* name;
+    const char* namespaze;
+    Il2CppType byval_arg;
+    Il2CppType this_arg;
+    Il2CppClass* element_class;
+    Il2CppClass* castClass;
+    Il2CppClass* declaringType;
+    Il2CppClass* parent;
+    void *generic_class;
+    void* typeMetadataHandle;
+    void* interopData;
+    Il2CppClass* klass;
+    void* fields;
+    void* methods;
+    Il2CppRuntimeInterfaceData* interfaces;
+};
+
+struct Il2CppClass_2
+{
+    Il2CppClass** typeHierarchy;
+    void* events;
+    void* properties;
+    void* nestedTypes;
+    void *unity_user_data;
+    uint32_t initializationExceptionGCHandle;
+    uint32_t cctor_started;
+    uint32_t cctor_finished_or_no_cctor;
+    size_t cctor_thread;
+    void* genericContainerHandle;
+    uint32_t instance_size;
+    uint32_t stack_slot_size;
+    uint32_t actualSize;
+    uint32_t element_size;
+    int32_t native_size;
+    uint32_t static_fields_size;
+    uint32_t thread_static_fields_size;
+    int32_t thread_static_fields_offset;
+    uint32_t flags;
+    uint32_t token;
+    uint16_t method_count;
+    uint16_t property_count;
+    uint16_t field_count;
+    uint16_t event_count;
+    uint16_t nested_type_count;
+    uint16_t vtable_count;
+    uint16_t interfaces_count;
+    uint16_t interface_offsets_count;
+    uint8_t typeHierarchyDepth;
+    uint8_t genericRecursionDepth;
+    uint8_t rank;
+    uint8_t minimumAlignment;
+    uint8_t packingSize;
+    uint8_t bitflags1;
+    uint8_t bitflags2;
+};
+
+struct Il2CppClass
+{
+    Il2CppClass_1 _1;
+    void* static_fields;
+    Il2CppRGCTXData* rgctx_data;
+    Il2CppClass_2 _2;
+    VirtualInvokeData vtable[255];
+};
+
+" + MethodInfoV29;
 
         public readonly static string HeaderV27 =
 @"struct Il2CppClass_1
