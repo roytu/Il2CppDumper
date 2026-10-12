@@ -8,6 +8,7 @@
     <FileVersion>1.0.0.0</FileVersion>
     <Copyright>Copyright © Perfare 2016-2024</Copyright>
     <DebugType>embedded</DebugType>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
 	<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
 
